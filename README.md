@@ -1,5 +1,6 @@
 # OpsPilot AI
 
+
 An internal operations command center prototype. It shows how **business rules**, **AI** and **human decisions** work together on customer projects:
 
 - **Automation** (plain Python rules) checks the predictable things: contact details, required documents, roof age against a demo threshold. It creates tasks and flags projects.

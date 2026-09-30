@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Tasks</h1>
+    <p>Follow-ups across every project, created by business rules, approved AI suggestions or the team.</p>
+  </div>
+</div>
+
+<section class="card">
+  <nav class="tabs" aria-label="Task views" style="padding: 0 var(--space-3)">
+    {% for key, label in [('all', 'All'), ('open', 'Open'), ('in_progress', 'In progress'), ('overdue', 'Overdue'), ('completed', 'Completed')] %}
+    <a class="tab{% if view == key %} is-active{% endif %}" href="{{ url_for('tasks', view=key, q=q, department=department) }}">{{ label }}
+      <span class="count{{ ' danger' if key == 'overdue' and counts[key] }}">{{ counts[key] }}</span></a>
+    {% endfor %}
+  </nav>
+
+  <form class="filter-bar" method="get">
+    <input type="hidden" name="view" value="{{ view }}">
+    <div class="input-group">
+      {{ ui.icon('search', 'lead') }}
+      <label class="sr-only" for="task-q">Search tasks</label>
+      <input class="input input-search" id="task-q" name="q" value="{{ q }}" placeholder="Search task or customer" data-live-filter="#task-table">
+    </div>
+    <label class="sr-only" for="department">Department</label>
+    <select class="select" id="department" name="department" data-autosubmit>
+      <option value="">All departments</option>
+      {% for d in DEPARTMENTS %}<option {{ 'selected' if department == d }}>{{ d }}</option>{% endfor %}
+    </select>
+    {% if q or department %}<a class="btn btn-ghost btn-sm" href="{{ url_for('tasks', view=view) }}">{{ ui.icon('x') }}Clear filters</a>{% endif %}
+    <span class="results-meta"><span data-visible-count>{{ tasks|length }}</span> tasks</span>
+  </form>
+
+  {% if tasks %}
+  <div class="table-wrap">
+    <table class="table" id="task-table">
+      <thead>
+        <tr><th>Task</th><th>Project</th><th>Department</th><th>Priority</th><th>Due date</th><th>Status</th><th class="actions">Update</th></tr>
+      </thead>
+      <tbody>
+      {% for t in tasks %}
+        <tr class="{{ 'is-overdue' if t.is_overdue }}{{ ' is-completed' if t.status == 'Completed' }}" data-search="{{ (t.title ~ ' ' ~ t.customer_name ~ ' ' ~ t.department)|lower }}" data-task-row>
+          <td style="max-width: 360px">
+            <span class="cell-primary">{{ t.title }}</span>
+            <span class="cell-sub">{% if t.source == 'AUTOMATION' %}Created by business rule{% elif t.source == 'AI' %}From approved AI suggestion{% else %}Added by team{% endif %}</span>
+          </td>
+          <td><a href="{{ url_for('project_detail', project_id=t.project_id) }}" class="cell-primary" style="color:inherit">{{ t.customer_name }}</a><span class="cell-sub">{{ t.service_type }}</span></td>
+          <td class="nowrap secondary">{{ t.department }}</td>
+          <td>{{ ui.priority_badge(t.priority) }}</td>
+          <td class="nowrap num">
+            {% if t.status == 'Completed' %}<span class="muted">Done</span>{% else %}
+            <span class="{{ 'strong' if t.is_overdue }}" style="{{ 'color:var(--danger-700)' if t.is_overdue }}">{{ t.due_date|due }}</span>{% endif %}
+            {% if t.due_date %}<span class="cell-sub">{{ t.due_date }}</span>{% endif %}
+          </td>
+          <td data-status-cell>{{ ui.task_badge(t.status, t.is_overdue) }}</td>
+          <td class="actions">
+            <label class="sr-only" for="ts-{{ t.id }}">Status for {{ t.title }}</label>
+            <select class="select" id="ts-{{ t.id }}" style="height:28px;width:128px" data-task-status="{{ url_for('api_task_status', task_id=t.id) }}">
+              {% for s in TASK_STATUSES %}<option {{ 'selected' if t.status == s }}>{{ s }}</option>{% endfor %}
+            </select>
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <div class="empty compact" data-no-results hidden>
+    <div class="empty-icon">{{ ui.icon('search', 'icon-lg') }}</div>
+    <div class="empty-title">No matching tasks</div>
+  </div>
+  {% else %}
+    {% if view == 'overdue' %}
+      {% call ui.empty_state('check', 'Nothing overdue', 'Every open task is within its due date.') %}{% endcall %}
+    {% else %}
+      {% call ui.empty_state('inbox', 'No tasks in this view', 'Try another tab or clear the filters.') %}{% endcall %}
+    {% endif %}
+  {% endif %}
+</section>
+
+{# Badge templates used by app.js when a status changes in place #}
+<template id="badge-Open">{{ ui.task_badge('Open') }}</template>
+<template id="badge-In Progress">{{ ui.task_badge('In Progress') }}</template>
+<template id="badge-Completed">{{ ui.task_badge('Completed') }}</template>
+{% endblock %}

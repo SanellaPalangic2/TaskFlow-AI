@@ -1,0 +1,21 @@
+# Render Blueprint: https://render.com/docs/blueprint-spec
+# In Render: New > Blueprint > pick this GitHub repo. You will be asked for ANTHROPIC_API_KEY.
+services:
+  - type: web
+    name: opspilot-ai
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    # One worker keeps SQLite and the first-run seeding simple; threads handle concurrent requests.
+    # AI calls can take a while, so the timeout is longer than gunicorn's default 30 s.
+    startCommand: gunicorn app:app --workers 1 --threads 4 --timeout 120 --bind 0.0.0.0:$PORT
+    healthCheckPath: /api/health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
+      - key: ANTHROPIC_API_KEY
+        sync: false          # entered in the Render dashboard, never stored in the repo
+      - key: FLASK_SECRET_KEY
+        generateValue: true
+      - key: ANTHROPIC_MODEL
+        value: claude-haiku-4-5-20251001

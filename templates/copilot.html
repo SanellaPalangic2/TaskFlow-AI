@@ -1,0 +1,114 @@
+{% extends "base.html" %}
+
+{% block header_actions %}
+<span class="badge actor-automation" data-tip="Copilot can only read OpsPilot data through {{ tool_count }} predefined queries. It cannot change anything." data-tip-pos="left">{{ ui.icon('shield') }}Read-only</span>
+{% endblock %}
+
+{% block content %}
+<div class="copilot-layout" id="copilot" data-ask-url="{{ url_for('api_copilot_ask') }}" data-ai-configured="{{ '1' if ai_configured else '0' }}">
+  <section class="card cp-panel" aria-label="Copilot conversation">
+    <header class="cp-head">
+      <div class="cp-title">
+        <span class="cp-mark">{{ ui.icon('sparkle') }}</span>
+        <div>
+          <h1>OpsPilot Copilot</h1>
+          <p>Ask about projects, tasks, documents and reviews. Answers come only from OpsPilot data.</p>
+        </div>
+      </div>
+      <button type="button" class="btn btn-ghost btn-sm" data-cp-clear hidden>{{ ui.icon('trash') }}Clear conversation</button>
+    </header>
+
+    <div class="cp-thread" id="cp-thread" aria-live="polite">
+      <div class="cp-welcome" id="cp-welcome">
+        <div class="cp-welcome-title">What would you like to know?</div>
+        <p class="cp-welcome-text">Copilot picks the right query, reads the results from the OpsPilot database and explains them. Every answer shows which records it used.</p>
+        <div class="cp-suggest-grid">
+          {% set hints = ['Projects flagged by rules or blocked', 'Tasks past their due date', 'Status and pending AI recommendations', 'Open tasks filtered by priority', 'Required documents not yet received', 'Status, findings, documents and tasks'] %}
+          {% set icons = ['alert', 'clock', 'shield', 'flag', 'file', 'folder'] %}
+          {% for q in suggestions %}
+          <button type="button" class="cp-suggest" data-cp-ask="{{ q }}">
+            <span class="cp-suggest-icon">{{ ui.icon(icons[loop.index0]) }}</span>
+            <span><span class="cp-suggest-q">{{ q }}</span><span class="cp-suggest-hint">{{ hints[loop.index0] }}</span></span>
+          </button>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+
+    <form class="cp-composer" id="cp-form" autocomplete="off" data-own-loading>
+      <div class="cp-chips" id="cp-chips" hidden>
+        {% for q in suggestions[:4] %}<button type="button" class="cp-chip" data-cp-ask="{{ q }}">{{ q }}</button>{% endfor %}
+      </div>
+      <div class="cp-input-row">
+        <label class="sr-only" for="cp-input">Ask Copilot</label>
+        <textarea id="cp-input" class="textarea cp-input" rows="1" maxlength="500" placeholder="Ask about projects, tasks, documents or reviews…"></textarea>
+        <button type="submit" class="btn btn-ai cp-send" id="cp-send">{{ ui.icon('arrow-up') }}<span class="spinner"></span><span>Send</span></button>
+      </div>
+      <div class="cp-hint"><span>Enter to send, Shift+Enter for a new line</span><span><span data-cp-count>0</span>/500</span></div>
+    </form>
+  </section>
+
+  <aside class="cp-rail">
+    <section class="card">
+      <div class="card-header"><div class="card-title">{{ ui.icon('database') }}What Copilot can answer</div></div>
+      <ul class="cp-capabilities">
+        <li>{{ ui.icon('alert', 'icon-sm') }}Projects that need attention, and why</li>
+        <li>{{ ui.icon('folder', 'icon-sm') }}A project's status, findings, documents and tasks</li>
+        <li>{{ ui.icon('clock', 'icon-sm') }}Open, overdue and high-priority tasks</li>
+        <li>{{ ui.icon('file', 'icon-sm') }}Missing documents</li>
+        <li>{{ ui.icon('shield', 'icon-sm') }}Human review queue</li>
+        <li>{{ ui.icon('layers', 'icon-sm') }}Pipeline counts and recent activity</li>
+      </ul>
+      <div class="card-footer small secondary">Anything outside OpsPilot data gets: “{{ 'I don\'t have enough information in OpsPilot to answer that.' }}”</div>
+    </section>
+
+    <section class="card">
+      <div class="card-header"><div class="card-title">{{ ui.icon('workflow') }}How answers are grounded</div></div>
+      <div class="card-body">
+        <ol class="cp-steps">
+          <li><span class="why-icon why-human">{{ ui.icon('user', 'icon-sm') }}</span><span>You ask a question</span></li>
+          <li><span class="why-icon why-ai">{{ ui.icon('sparkle', 'icon-sm') }}</span><span>AI chooses from {{ tool_count }} safe, predefined queries</span></li>
+          <li><span class="why-icon why-rule">{{ ui.icon('database', 'icon-sm') }}</span><span>OpsPilot validates the request and reads its database</span></li>
+          <li><span class="why-icon why-ai">{{ ui.icon('sparkle', 'icon-sm') }}</span><span>AI writes the answer from those results only</span></li>
+          <li><span class="why-icon why-rule">{{ ui.icon('check', 'icon-sm') }}</span><span>OpsPilot checks the answer and lists its sources</span></li>
+        </ol>
+        <p class="xsmall muted" style="margin-top:var(--space-3)">The model never writes SQL. Unknown tools and invalid arguments are rejected before any query runs.</p>
+      </div>
+    </section>
+  </aside>
+</div>
+
+<template id="cp-tpl-question">
+  <div class="cp-q">
+    <span class="avatar avatar-sm">{{ demo_user.initials }}</span>
+    <div class="cp-q-body"><div class="cp-q-text"></div><div class="cp-time"></div></div>
+  </div>
+</template>
+
+<template id="cp-tpl-loading">
+  <div class="cp-a is-loading">
+    <span class="cp-a-mark">{{ ui.icon('sparkle') }}</span>
+    <div class="cp-a-body">
+      <div class="cp-status"><span class="spinner"></span>Checking OpsPilot data…</div>
+      <p class="xsmall muted">Choosing the right query and reading the results.</p>
+      <div class="skeleton" style="width: 80%; margin-top: 10px"></div>
+      <div class="skeleton" style="width: 62%; margin-top: 8px"></div>
+    </div>
+  </div>
+</template>
+
+<template id="cp-tpl-icons">
+  <span data-i="database">{{ ui.icon('database', 'icon-sm') }}</span>
+  <span data-i="info">{{ ui.icon('info', 'icon-sm') }}</span>
+  <span data-i="alert">{{ ui.icon('alert', 'icon-sm') }}</span>
+  <span data-i="refresh">{{ ui.icon('refresh', 'icon-sm') }}</span>
+  <span data-i="chevron">{{ ui.icon('chevron-right', 'icon-sm') }}</span>
+  <span data-i="tool">{{ ui.icon('tool', 'icon-sm') }}</span>
+  <span data-i="sparkle">{{ ui.icon('sparkle') }}</span>
+  <span data-i="shield">{{ ui.icon('shield', 'icon-sm') }}</span>
+</template>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/copilot.js') }}"></script>
+{% endblock %}

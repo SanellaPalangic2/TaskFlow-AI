@@ -1,0 +1,63 @@
+{% import "_macros.html" as ui %}
+{% set a = nba.analysis %}
+<section class="card nba-card" id="next-best-action">
+  <div class="nba-head">
+    <div class="nba-kicker">{{ ui.icon('target') }}Next best action</div>
+    <div class="row wrap" style="gap:6px">
+      <span class="small muted">Source</span>
+      {% if nba.source == 'Combined' %}
+        <span class="badge actor-combined" data-tip="The recommendation comes from AI, and business rules found facts that support it.">{{ ui.icon('sparkle') }}{{ ui.icon('cpu') }}Combined</span>
+      {% elif nba.source == 'AI recommendation' %}
+        <span class="badge actor-ai" data-tip="Suggested by AI from the customer notes and project record. No business rule is currently flagged.">{{ ui.icon('sparkle') }}AI recommendation</span>
+      {% else %}
+        <span class="badge actor-automation" data-tip="Derived from deterministic business rules. No AI suggestion is active.">{{ ui.icon('cpu') }}Business rule</span>
+      {% endif %}
+      {% if a %}{{ ui.review_badge(a.review_status) }}{% endif %}
+    </div>
+  </div>
+
+  <div class="nba-body">
+    <p class="nba-headline">{{ nba.headline }}</p>
+    {% if nba.owner %}<p class="nba-owner">{{ ui.icon('user', 'icon-sm') }}Suggested owner: <span class="strong">{{ nba.owner }}</span></p>{% endif %}
+
+    {% if nba.stale %}
+    <div class="alert alert-warning nba-alert">{{ ui.icon('refresh') }}<div>Project details changed after this recommendation was made. <button type="button" class="link-btn" data-run-analysis="{{ url_for('api_analyze', project_id=project.id) }}"><span class="btn-text">Re-analyze</span></button> for an up-to-date view.</div></div>
+    {% endif %}
+
+    <div class="nba-why">
+      <div class="nba-why-title">
+        <span>{{ 'Key reasons' if a else 'Why?' }}</span>
+        {% if a %}<button type="button" class="why-btn is-lg" data-explain="{{ url_for('api_explain', kind='analysis', obj_id=a.id) }}" aria-label="Why? Open the full explanation for this recommendation">{{ ui.icon('info') }}Why?</button>{% endif %}
+      </div>
+      <ul class="why-list">
+        {% for w in nba.why %}
+        <li><span class="why-icon why-{{ w.source }}" data-tip="{{ 'From a business rule' if w.source == 'rule' else 'From the AI analysis' }}">{{ ui.icon('cpu' if w.source == 'rule' else 'sparkle', 'icon-sm') }}</span><span>{{ w.text }}</span></li>
+        {% endfor %}
+      </ul>
+    </div>
+  </div>
+
+  <div class="nba-decision">
+    <span class="timeline-marker actor-human">{{ ui.icon('user') }}</span>
+    {% if a and a.review_status == 'Pending' %}
+      <span class="small secondary grow">A person decides. Approving records the decision and creates a task only if none already covers it.</span>
+      <div class="row wrap">
+        <form method="post" action="{{ url_for('analysis_review', analysis_id=a.id) }}" data-confirm="Approve this recommendation? If no open task already covers it, a task is created for {{ a.suggested_department }}. The project's stage and status stay the same." data-confirm-title="Approve AI recommendation" data-confirm-action="Approve">
+          <input type="hidden" name="decision" value="accept">
+          <button class="btn btn-primary btn-sm">{{ ui.icon('check') }}<span class="spinner"></span>Approve</button>
+        </form>
+        <form method="post" action="{{ url_for('analysis_review', analysis_id=a.id) }}" data-confirm="Override this recommendation? Your decision is logged, no task is created, and business rules keep running as normal." data-confirm-title="Override AI recommendation" data-confirm-action="Override">
+          <input type="hidden" name="decision" value="dismiss">
+          <button class="btn btn-sm" data-tip="Record that a person decided differently. Business rules keep running." data-tip-pos="left">{{ ui.icon('x') }}<span class="spinner"></span>Override</button>
+        </form>
+      </div>
+    {% elif a %}
+      <span class="small secondary grow">Recommendation {{ 'approved' if a.review_status == 'Accepted' else a.review_status|lower }} by a team member. Update the workflow stage when the follow-ups are done.</span>
+    {% elif nba.dismissed %}
+      <span class="small secondary grow">The last AI recommendation was overridden, so this action comes from the business rules. Run a new analysis for a fresh suggestion.</span>
+    {% else %}
+      <span class="small secondary grow">No AI recommendation yet. This action comes from the business rules alone.</span>
+      <button type="button" class="btn btn-sm" data-run-analysis="{{ url_for('api_analyze', project_id=project.id) }}">{{ ui.icon('sparkle') }}<span class="spinner"></span><span class="btn-text">Analyze project</span></button>
+    {% endif %}
+  </div>
+</section>

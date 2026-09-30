@@ -1,0 +1,156 @@
+{% extends "base.html" %}
+
+{% block crumbs %}
+<div class="crumbs"><a href="{{ url_for('projects') }}">Projects</a>{{ ui.icon('chevron-right') }}<span>New</span></div>
+{% endblock %}
+
+{% macro field_error(name) -%}
+{% if errors.get(name) %}<span class="error-text" id="{{ name }}-error">{{ ui.icon('alert', 'icon-sm') }}{{ errors[name] }}</span>{% endif %}
+{%- endmacro %}
+
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>New project</h1>
+    <p>Add a customer and their request. Business rules run as soon as you create it.</p>
+  </div>
+</div>
+
+<div class="grid form-page-grid">
+  <form class="card" method="post" novalidate id="new-project-form" data-validate>
+    <div class="card-body" style="padding: var(--space-6)">
+      {% if errors %}
+      <div class="alert alert-error" role="alert" style="margin-bottom: var(--space-5)">
+        {{ ui.icon('alert') }}
+        <div><div class="alert-title">{{ errors|length }} field{{ 's' if errors|length > 1 }} need{{ 's' if errors|length == 1 }} attention</div>
+        Fix the highlighted fields and create the project again.</div>
+      </div>
+      {% endif %}
+
+      <section class="form-section">
+        <div>
+          <h2 class="form-section-title">Customer</h2>
+          <p class="form-section-desc">Who the project is for. Missing email, phone or address is flagged automatically.</p>
+        </div>
+        <div class="form-grid">
+          <div class="field{{ ' is-invalid' if errors.first_name }}">
+            <label class="label" for="first_name">First name<span class="req">*</span></label>
+            <input class="input" id="first_name" name="first_name" value="{{ form.first_name }}" required maxlength="60" autocomplete="off">
+            {{ field_error('first_name') }}
+          </div>
+          <div class="field{{ ' is-invalid' if errors.last_name }}">
+            <label class="label" for="last_name">Last name<span class="req">*</span></label>
+            <input class="input" id="last_name" name="last_name" value="{{ form.last_name }}" required maxlength="60" autocomplete="off">
+            {{ field_error('last_name') }}
+          </div>
+          <div class="field{{ ' is-invalid' if errors.email }}">
+            <label class="label" for="email">Email<span class="opt">Optional</span></label>
+            <input class="input" id="email" name="email" type="email" value="{{ form.email }}" placeholder="name@example.com" maxlength="120" autocomplete="off">
+            {{ field_error('email') }}
+          </div>
+          <div class="field{{ ' is-invalid' if errors.phone }}">
+            <label class="label" for="phone">Phone<span class="opt">Optional</span></label>
+            <input class="input" id="phone" name="phone" type="tel" value="{{ form.phone }}" placeholder="(555) 010-0000" maxlength="30" autocomplete="off">
+            {{ field_error('phone') }}
+          </div>
+          <div class="field span-2">
+            <label class="label" for="address">Service address<span class="opt">Optional</span></label>
+            <input class="input" id="address" name="address" value="{{ form.address }}" placeholder="Street, city" maxlength="200" autocomplete="off">
+          </div>
+        </div>
+      </section>
+
+      <section class="form-section">
+        <div>
+          <h2 class="form-section-title">Project details</h2>
+          <p class="form-section-desc">The service requested and the facts the rules engine checks.</p>
+        </div>
+        <div class="form-grid">
+          <div class="field{{ ' is-invalid' if errors.service_type }}">
+            <label class="label" for="service_type">Service type<span class="req">*</span></label>
+            <select class="select" id="service_type" name="service_type" required>
+              <option value="">Choose a service</option>
+              {% for s in SERVICE_TYPES %}<option value="{{ s }}" {{ 'selected' if form.service_type == s }}>{{ s }}</option>{% endfor %}
+            </select>
+            {{ field_error('service_type') }}
+          </div>
+          <div class="field">
+            <label class="label" for="priority">Starting priority</label>
+            <select class="select" id="priority" name="priority">
+              {% for p in PRIORITIES %}<option value="{{ p }}" {{ 'selected' if (form.priority or 'Medium') == p }}>{{ p }}</option>{% endfor %}
+            </select>
+            <span class="help">Rules may raise it if a review is needed.</span>
+          </div>
+          <div class="field{{ ' is-invalid' if errors.monthly_electric_bill }}">
+            <label class="label" for="monthly_electric_bill">Monthly electric bill<span class="opt">Optional</span></label>
+            <div class="input-group">
+              <span class="affix left">$</span>
+              <input class="input has-left has-right num" id="monthly_electric_bill" name="monthly_electric_bill" inputmode="decimal" value="{{ form.monthly_electric_bill }}" placeholder="0">
+              <span class="affix right">/mo</span>
+            </div>
+            {{ field_error('monthly_electric_bill') }}
+          </div>
+          <div class="field{{ ' is-invalid' if errors.roof_age }}">
+            <label class="label" for="roof_age">Roof age<span class="opt">Optional</span></label>
+            <div class="input-group">
+              <input class="input has-right num" id="roof_age" name="roof_age" inputmode="numeric" value="{{ form.roof_age }}" placeholder="0">
+              <span class="affix right">years</span>
+            </div>
+            {% if errors.roof_age %}{{ field_error('roof_age') }}{% else %}
+            <span class="help" id="roof-help">Over {{ roof_threshold }} years is flagged for human review (demo threshold).</span>{% endif %}
+          </div>
+        </div>
+      </section>
+
+      <section class="form-section">
+        <div>
+          <h2 class="form-section-title">Documents on file</h2>
+          <p class="form-section-desc">Required documents depend on the service. Anything not checked becomes a follow-up task.</p>
+        </div>
+        <div class="stack" style="gap:var(--space-2)" id="doc-options">
+          {% set all_docs = [] %}{% for docs in required_docs.values() %}{% for d in docs %}{% if d not in all_docs %}{% set _ = all_docs.append(d) %}{% endif %}{% endfor %}{% endfor %}
+          {% for d in all_docs %}
+          {% set services = [] %}{% for svc, docs in required_docs.items() %}{% if d in docs %}{% set _ = services.append(svc) %}{% endif %}{% endfor %}
+          <label class="checkbox" data-doc-for="{{ services|join('|') }}">
+            <input type="checkbox" name="documents_received" value="{{ d }}" {{ 'checked' if form.getlist and d in form.getlist('documents_received') }}>
+            <span><span class="strong">{{ d }}</span> already received<span class="help" style="display:block">Required for {{ services|join(', ') }}</span></span>
+          </label>
+          {% endfor %}
+          <p class="help" data-doc-empty>Choose a service type to see which documents it requires.</p>
+        </div>
+      </section>
+
+      <section class="form-section">
+        <div>
+          <h2 class="form-section-title">Customer notes</h2>
+          <p class="form-section-desc">In the customer's own words where possible. AI reads these to find intent and concerns.</p>
+        </div>
+        <div class="field{{ ' is-invalid' if errors.notes }}">
+          <label class="label" for="notes">Notes<span class="opt">Optional</span></label>
+          <textarea class="textarea" id="notes" name="notes" maxlength="2000" rows="5" data-char-count placeholder="e.g. I want solar but I'm worried my roof may need to be replaced first.">{{ form.notes }}</textarea>
+          <div class="row-between"><span>{{ field_error('notes') }}</span><span class="char-count"><span data-count>0</span> / 2,000</span></div>
+        </div>
+      </section>
+    </div>
+    <div class="card-footer row-between">
+      <span class="small muted"><span class="req" style="color:var(--danger-700)">*</span> Required</span>
+      <div class="row">
+        <a href="{{ url_for('projects') }}" class="btn">Cancel</a>
+        <button type="submit" class="btn btn-primary" data-loading-text="Creating project">{{ ui.icon('plus') }}<span class="spinner"></span><span class="btn-text">Create project</span></button>
+      </div>
+    </div>
+  </form>
+
+  <aside class="card">
+    <div class="card-header"><div class="card-title">{{ ui.icon('workflow') }}What happens next</div></div>
+    <div class="card-body">
+      <ul class="timeline">
+        <li class="timeline-item">{{ ui.actor_marker('HUMAN') }}<div class="timeline-content"><div class="timeline-action strong">You create the project</div><div class="small secondary">It starts in the New Lead stage.</div></div></li>
+        <li class="timeline-item">{{ ui.actor_marker('AUTOMATION') }}<div class="timeline-content"><div class="timeline-action strong">Business rules run</div><div class="small secondary">Contact details, required documents and roof age are checked. Follow-up tasks are created and the project is flagged if needed.</div></div></li>
+        <li class="timeline-item">{{ ui.actor_marker('AI') }}<div class="timeline-content"><div class="timeline-action strong">AI analysis on request</div><div class="small secondary">From the project page, Claude reads the notes and suggests a next action. It can't change the project.</div></div></li>
+        <li class="timeline-item">{{ ui.actor_marker('HUMAN') }}<div class="timeline-content"><div class="timeline-action strong">A person decides</div><div class="small secondary">Approve or dismiss suggestions, move stages, and approve any customer message.</div></div></li>
+      </ul>
+    </div>
+  </aside>
+</div>
+{% endblock %}

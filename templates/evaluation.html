@@ -1,0 +1,207 @@
+{% extends "base.html" %}
+
+{% block header_actions %}
+<span class="xsmall muted ev-head-hint">Manual only · up to {{ limits.max }} requests</span>
+<button type="button" class="btn btn-ai" id="ev-run-open" data-open-modal="ev-run-modal">{{ ui.icon('play') }}<span class="btn-label">Run AI Evaluation</span></button>
+{% endblock %}
+
+{% block content %}
+<div class="ev" id="ev" data-start-url="{{ url_for('api_eval_start') }}" data-page-url="{{ url_for('evaluation_page') }}"
+     data-step-url-template="{{ url_for('api_eval_step', run_id=0) }}" data-stop-url-template="{{ url_for('api_eval_stop', run_id=0) }}"
+     data-result-url-template="{{ url_for('api_eval_result', result_id=0) }}" data-review-url-template="{{ url_for('api_eval_review', result_id=0) }}"
+     {% if run and run.status == 'running' %}data-running-run="{{ run.id }}"{% endif %}>
+
+<div class="page-head">
+  <div>
+    <h1>AI Evaluation Lab</h1>
+    <p>AI features are tested and measured, not assumed to work. Each run sends {{ cases|length }} synthetic cases with known answers through the real Claude project-analysis call. Python scores every result, and a person reviews the disagreements.</p>
+  </div>
+</div>
+
+<section class="card ev-scope" aria-label="What is tested">
+  <div class="ev-scope-item"><span class="ev-scope-k">Feature under test</span><span class="ev-scope-v">{{ ui.icon('sparkle', 'icon-sm') }}Project analysis<span class="muted"> · same call as project pages</span></span></div>
+  <div class="ev-scope-item"><span class="ev-scope-k">Model</span><span class="ev-scope-v"><code>{{ ai_model }}</code></span></div>
+  <div class="ev-scope-item"><span class="ev-scope-k">Prompt version</span><span class="ev-scope-v" data-tip="Fingerprint of the production prompt and output schema. It changes whenever either changes, so runs can be compared fairly."><code>{{ prompt_version }}</code></span></div>
+  <div class="ev-scope-item"><span class="ev-scope-k">Test cases</span><span class="ev-scope-v">{{ cases|length }} synthetic<span class="muted"> · fictional records</span></span></div>
+  <div class="ev-guards" aria-label="Cost controls">
+    <span class="ev-guard" data-tip="Opening this page never calls Claude. A run starts only when someone clicks Run and confirms.">{{ ui.icon('shield', 'icon-xs') }}Manual start only</span>
+    <span class="ev-guard" data-tip="EVAL_MAX_CASES">{{ ui.icon('shield', 'icon-xs') }}Max {{ limits.max }} requests per run</span>
+    <span class="ev-guard" data-tip="EVAL_COOLDOWN_SECONDS">{{ ui.icon('shield', 'icon-xs') }}1 run per {{ limits.cooldown }} s</span>
+    <span class="ev-guard" data-tip="EVAL_MAX_RUNS_PER_DAY">{{ ui.icon('shield', 'icon-xs') }}{{ limits.per_day }} runs per day</span>
+    <span class="ev-guard" data-tip="Each case is one request. Stopping takes effect before the next request.">{{ ui.icon('shield', 'icon-xs') }}Stop any time</span>
+  </div>
+</section>
+
+{# ---------------- Run bar ---------------- #}
+<section class="ev-runbar" aria-label="Selected run">
+  {% if run %}
+  <div class="ev-runbar-main">
+    <span class="ev-run-id">Run #{{ run.id }}</span>
+    {% set st = {'completed': ('ev-st-done', 'check', 'Completed'), 'running': ('ev-st-running', 'refresh', 'Running'), 'stopped': ('ev-st-stopped', 'minus', 'Stopped')}[run.status] %}
+    <span class="badge {{ st[0] }}">{{ ui.icon(st[1]) }}{{ st[2] }}</span>
+    <span class="ev-run-meta">{{ ui.icon('clock', 'icon-xs') }}<span data-tip="{{ run.started_at|datetime }}">{{ run.started_at|datetime }}</span></span>
+    <span class="ev-run-meta"><code>{{ run.model }}</code></span>
+    <span class="ev-run-meta">{{ run.metrics.cases }} of {{ run.planned_cases }} cases</span>
+    {% if run.prompt_version != prompt_version %}<span class="badge ev-review" data-tip="The production prompt or schema has changed since this run ({{ run.prompt_version }} → {{ prompt_version }}).">{{ ui.icon('alert') }}Older prompt</span>{% endif %}
+    {% if run.stop_reason %}<span class="ev-run-meta ev-stop-reason">{{ run.stop_reason }}</span>{% endif %}
+  </div>
+  <div class="ev-compare">
+    <label class="xsmall muted" for="ev-compare">Compare with</label>
+    <select class="select select-sm" id="ev-compare" data-run="{{ run.id }}">
+      <option value="">No comparison</option>
+      {% for h in history if h.id != run.id %}
+      <option value="{{ h.id }}" {{ 'selected' if compare and compare.id == h.id }}>Run #{{ h.id }} · {{ h.started_at|datetime }} · {{ h.metrics.pass_rate.pct if h.metrics.pass_rate.pct is not none else '—' }}% passed</option>
+      {% endfor %}
+    </select>
+  </div>
+  {% else %}
+  <div class="ev-runbar-main"><span class="ev-run-id">No runs yet</span><span class="ev-run-meta">The {{ cases|length }} test cases below show their expected answers. Click <strong>Run AI Evaluation</strong> to test them against Claude.</span></div>
+  {% endif %}
+</section>
+
+{# ---------------- Live progress ---------------- #}
+<section class="card ev-progress" id="ev-progress" hidden aria-live="polite">
+  <div class="ev-progress-head">
+    <span class="spinner"></span>
+    <div class="grow"><div class="ev-progress-title" id="ev-progress-title">Starting evaluation…</div>
+      <div class="xsmall muted" id="ev-progress-sub">Each case is one request to Claude. Results are stored as they arrive.</div></div>
+    <button type="button" class="btn btn-sm" id="ev-stop">{{ ui.icon('minus') }}<span class="btn-text">Stop after this case</span></button>
+  </div>
+  <div class="ev-progress-bar"><span id="ev-progress-fill" style="width:0%"></span></div>
+</section>
+
+<div id="ev-metrics-wrap">{% include "partials/eval_metrics.html" %}</div>
+
+{# ---------------- Results ---------------- #}
+<section class="card ev-results" aria-labelledby="ev-results-title">
+  <div class="card-header">
+    <div class="dq-heading">
+      <span class="dash-title-icon tone-ai">{{ ui.icon('beaker') }}</span>
+      <div><h2 class="card-title" id="ev-results-title">Test results</h2>
+        <div class="card-subtitle">Expected values are fixed per case; actual values are the stored model output</div></div>
+    </div>
+    <details class="ev-rules">
+      <summary>{{ ui.icon('info', 'icon-sm') }}How results are decided</summary>
+      <div class="ev-rules-pop">
+        <p><strong>Three checks per case</strong>, computed in Python:</p>
+        <ul>
+          <li><strong>Classification:</strong> the model's intent is one of the accepted intents.</li>
+          <li><strong>Important information:</strong> every expected item appears in the model's missing information or concerns, and nothing on the "must not claim" list is reported missing.</li>
+          <li><strong>Action category:</strong> the suggested team is one of the accepted teams.</li>
+        </ul>
+        <p><span class="badge ev-passed">Passed</span> all three pass · <span class="badge ev-review">Review required</span> one does not · <span class="badge ev-failed">Failed</span> two or more do not, or the API call failed.</p>
+        <p class="muted">The model never grades itself.</p>
+      </div>
+    </details>
+  </div>
+  <div class="table-wrap">
+    <table class="table ev-table">
+      <thead><tr>
+        <th class="ev-c-case">Test case</th><th class="ev-c-exp">Expected</th><th class="ev-c-act">Actual</th>
+        <th class="ev-c-res">Result</th><th class="ev-c-human">Human evaluation</th><th class="ev-c-go"><span class="sr-only">Details</span></th>
+      </tr></thead>
+      <tbody id="ev-tbody">
+        {% for row in rows %}{% include "partials/eval_row.html" %}{% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+{# ---------------- History ---------------- #}
+<section class="card ev-history" aria-labelledby="ev-history-title">
+  <div class="card-header">
+    <div class="dq-heading">
+      <span class="dash-title-icon tone-neutral">{{ ui.icon('clock') }}</span>
+      <div><h2 class="card-title" id="ev-history-title">Run history</h2>
+        <div class="card-subtitle">Every run is stored with its model, prompt version, results and human evaluations</div></div>
+    </div>
+  </div>
+  {% if history %}
+  <div class="table-wrap">
+    <table class="table ev-htable">
+      <thead><tr><th>Run</th><th>Model</th><th>Run date</th><th>Cases</th><th>Result</th><th class="ev-h-m" title="Classification accuracy">Classif.</th><th class="ev-h-m" title="Information detection accuracy">Info</th><th class="ev-h-m" title="Recommendation agreement">Agreement</th><th title="Human evaluations recorded">Reviewed</th><th><span class="sr-only">Actions</span></th></tr></thead>
+      <tbody>
+      {% for h in history %}{% set hm = h.metrics %}
+        <tr class="{{ 'is-current' if run and run.id == h.id }}">
+          <td>{% if run and run.id == h.id %}<span class="strong">#{{ h.id }}</span>{% else %}<a class="strong" href="{{ url_for('evaluation_page', run=h.id) }}" title="View this run">#{{ h.id }}</a>{% endif %}{% if loop.first %} <span class="ev-latest">Latest</span>{% endif %}
+            {% if h.status != 'completed' %}<div class="xsmall muted">{{ h.status|capitalize }}</div>{% endif %}</td>
+          <td><code class="ev-model">{{ h.model }}</code><div class="xsmall muted" data-tip="Prompt version">v{{ h.prompt_version }}</div></td>
+          <td class="nowrap">{{ h.started_at|datetime }}</td>
+          <td class="num">{{ hm.cases }}{% if hm.cases != h.planned_cases %}<span class="muted"> / {{ h.planned_cases }}</span>{% endif %}</td>
+          <td>
+            <div class="ev-hres">
+              <div class="ev-bar ev-bar-sm">{% for k in ('passed', 'review', 'failed') %}{% if hm.results[k] %}<span class="ev-bar-{{ k }}" style="flex: {{ hm.results[k] }}"></span>{% endif %}{% endfor %}{% if not hm.cases %}<span class="ev-bar-empty" style="flex:1"></span>{% endif %}</div>
+              <span class="xsmall"><span class="num strong">{{ hm.results.passed }}</span> passed · {{ hm.results.review }} review · {{ hm.results.failed }} failed</span>
+            </div>
+          </td>
+          {% for k in ('classification', 'information', 'action') %}<td class="num ev-h-m">{{ (hm[k].pct ~ '%') if hm[k].pct is not none else '—' }}</td>{% endfor %}
+          <td class="nowrap">{{ hm.reviewed }} of {{ hm.cases }}</td>
+          <td class="nowrap ev-h-actions">{% if run and run.id == h.id %}<span class="xsmall muted">Showing</span>{% endif %}
+            {% if run and run.id != h.id %}<a class="btn btn-sm" href="{{ url_for('evaluation_page', run=run.id, compare=h.id) }}">Compare</a>{% endif %}
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+    {% call ui.empty_state('clock', 'No evaluation runs yet', 'Runs appear here with their model, date, results and human evaluations. Nothing runs automatically.', compact=True) %}{% endcall %}
+  {% endif %}
+</section>
+</div>
+
+{# ---------------- Confirm run ---------------- #}
+<dialog class="modal" id="ev-run-modal" aria-labelledby="ev-run-title">
+  <div class="modal-header">
+    <div><div class="modal-title" id="ev-run-title">Run AI Evaluation</div>
+      <div class="modal-desc">Sends synthetic test cases to the real Anthropic API. Each case is one request.</div></div>
+    <button type="button" class="btn btn-ghost btn-icon" data-close-modal aria-label="Close">{{ ui.icon('x') }}</button>
+  </div>
+  <div class="modal-body">
+    <div class="stack" style="gap:var(--space-2)">
+      <label class="ev-option"><input type="radio" name="ev-limit" value="{{ limits.quick }}" checked>
+        <span><span class="strong">Quick check: {{ limits.quick }} cases</span><span class="help" style="display:block">{{ limits.quick }} requests · about {{ '{:,.0f}'.format(estimate_quick.input_tokens) }} input and {{ '{:,}'.format(estimate_quick.output_tokens) }} output tokens (estimate)</span></span></label>
+      <label class="ev-option"><input type="radio" name="ev-limit" value="{{ limits.max }}">
+        <span><span class="strong">Full evaluation: {{ [limits.max, cases|length]|min }} cases</span><span class="help" style="display:block">{{ [limits.max, cases|length]|min }} requests · about {{ '{:,.0f}'.format(estimate_full.input_tokens) }} input and {{ '{:,}'.format(estimate_full.output_tokens) }} output tokens (estimate)</span></span></label>
+    </div>
+    <div class="ev-confirm-facts">
+      <div><span class="ev-scope-k">Model</span><code>{{ ai_model }}</code></div>
+      <div><span class="ev-scope-k">Feature</span>Project analysis</div>
+      <div><span class="ev-scope-k">Data</span>Synthetic cases only</div>
+    </div>
+    <p class="xsmall muted">Token figures are rough estimates (characters ÷ 4). The actual usage Claude reports is stored with each result. You can stop after any case.</p>
+    <div id="ev-run-alert"></div>
+  </div>
+  <div class="modal-footer">
+    <button type="button" class="btn" data-close-modal>Cancel</button>
+    <button type="button" class="btn btn-ai" id="ev-run-go">{{ ui.icon('play') }}<span class="spinner"></span><span class="btn-text">Start run</span></button>
+  </div>
+</dialog>
+
+{# ---------------- Result detail ---------------- #}
+<dialog class="xp ev-drawer" id="ev-drawer" aria-labelledby="ev-d-title">
+  <div class="xp-shell">
+    <header class="xp-head">
+      <div class="xp-head-top">
+        <div class="xp-kicker">{{ ui.icon('beaker', 'icon-sm') }}<span id="ev-d-kicker">Test case</span></div>
+        <button type="button" class="btn btn-ghost btn-icon btn-sm" data-ev-close aria-label="Close details">{{ ui.icon('x') }}</button>
+      </div>
+      <div id="ev-d-head"></div>
+      <nav class="xp-nav ev-d-nav" aria-label="Sections">
+        <button type="button" class="xp-nav-btn src-fact" data-ev-jump="ev-sec-input">{{ ui.icon('database', 'icon-sm') }}<span>Input</span></button>
+        <button type="button" class="xp-nav-btn src-expected" data-ev-jump="ev-sec-expected">{{ ui.icon('target', 'icon-sm') }}<span>Expected</span></button>
+        <button type="button" class="xp-nav-btn src-ai" data-ev-jump="ev-sec-actual">{{ ui.icon('sparkle', 'icon-sm') }}<span>Actual</span></button>
+        <button type="button" class="xp-nav-btn src-rule" data-ev-jump="ev-sec-compare">{{ ui.icon('cpu', 'icon-sm') }}<span>Comparison</span></button>
+        <button type="button" class="xp-nav-btn src-human" data-ev-jump="ev-sec-human">{{ ui.icon('user', 'icon-sm') }}<span>Human</span></button>
+      </nav>
+    </header>
+    <div class="xp-body" id="ev-d-body" tabindex="-1"></div>
+  </div>
+</dialog>
+
+<script id="ev-config" type="application/json">{{ {'verdicts': verdicts, 'results': result_labels}|tojson }}</script>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/evaluation.js') }}"></script>
+{% endblock %}

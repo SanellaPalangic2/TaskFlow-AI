@@ -1,0 +1,43 @@
+{% import "_macros.html" as ui %}
+<section class="card" id="activity">
+  <div class="card-header">
+    <div class="card-title">{{ ui.icon('clock') }}Activity timeline <span class="card-subtitle">Oldest first</span></div>
+    <div class="legend">
+      <span class="legend-item">{{ ui.actor_tag('AI') }}</span>
+      <span class="legend-item">{{ ui.actor_tag('AUTOMATION') }}</span>
+      <span class="legend-item">{{ ui.actor_tag('HUMAN') }}</span>
+    </div>
+  </div>
+  <div class="card-body">
+    {% if activity %}
+    {% set ns = namespace(day=None) %}
+    <ul class="timeline">
+      {% for a in activity|reverse %}
+      {% set day = a.created_at[:10] %}
+      {% if day != ns.day %}
+        {% set ns.day = day %}
+        <li class="timeline-day">{{ day|dayname }}</li>
+      {% endif %}
+      <li class="timeline-item">
+        {{ ui.actor_marker(a.action_type) }}
+        <div class="timeline-content">
+          <div class="timeline-row">
+            <span class="timeline-time num" data-tip="{{ a.created_at|datetime }}">{{ a.created_at|clock }}</span>
+            <span class="timeline-action">{{ a.action }}</span>
+          </div>
+          <div class="timeline-meta">{{ ui.actor_tag(a.action_type, with_tip=False) }}
+            {% set d = a.details|fromjson if a.details else None %}
+            {% if d and d.response_id %}<span class="provenance"><span>Claude response <code>{{ d.response_id }}</code></span></span>{% endif %}
+            {% if d and d.department and a.action_type == 'AUTOMATION' %}<span>{{ d.department }}, {{ d.priority }} priority</span>{% endif %}
+          </div>
+          {% if d and d.note %}<div class="timeline-detail">“{{ d.note }}”</div>
+          {% elif d and d.subject %}<div class="timeline-detail"><span class="strong">{{ d.subject }}</span></div>{% endif %}
+        </div>
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+      {% call ui.empty_state('clock', 'No activity yet', compact=True) %}{% endcall %}
+    {% endif %}
+  </div>
+</section>

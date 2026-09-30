@@ -1,0 +1,20 @@
+{% import "_macros.html" as ui %}
+{# Explainability side panel. Filled by static/js/explain.js from /api/explain/... (stored data only). #}
+<dialog class="xp" id="explain-drawer" aria-labelledby="xp-title">
+  <div class="xp-shell">
+    <header class="xp-head">
+      <div class="xp-head-top">
+        <div class="xp-kicker">{{ ui.icon('info', 'icon-sm') }}<span id="xp-kicker">Why this recommendation?</span></div>
+        <button type="button" class="btn btn-ghost btn-icon btn-sm" data-xp-close aria-label="Close explanation">{{ ui.icon('x') }}</button>
+      </div>
+      <div id="xp-rec"></div>
+      <nav class="xp-nav" aria-label="Explanation sections">
+        <button type="button" class="xp-nav-btn src-fact" data-xp-jump="xp-sec-evidence">{{ ui.icon('database', 'icon-sm') }}<span>Evidence</span></button>
+        <button type="button" class="xp-nav-btn src-ai" data-xp-jump="xp-sec-ai">{{ ui.icon('sparkle', 'icon-sm') }}<span>AI interpretation</span></button>
+        <button type="button" class="xp-nav-btn src-rule" data-xp-jump="xp-sec-rules">{{ ui.icon('cpu', 'icon-sm') }}<span>Business rules</span></button>
+        <button type="button" class="xp-nav-btn src-human" data-xp-jump="xp-sec-human">{{ ui.icon('user', 'icon-sm') }}<span>Human decision</span></button>
+      </nav>
+    </header>
+    <div class="xp-body" id="xp-body" tabindex="-1"></div>
+  </div>
+</dialog>

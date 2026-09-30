@@ -1,0 +1,322 @@
+{% extends "base.html" %}
+{% set m = d.metrics %}
+
+{% block header_actions %}
+<a href="{{ url_for('project_new') }}" class="btn btn-primary">{{ ui.icon('plus') }}<span class="btn-label">New project</span></a>
+{% endblock %}
+
+{% macro stage_steps(step, total) -%}
+<span class="dq-steps" aria-label="Stage {{ step }} of {{ total }}">{% for i in range(1, total + 1) %}<span class="{{ 'on' if i <= step }}"></span>{% endfor %}</span>
+{%- endmacro %}
+
+{% block content %}
+<div class="dash">
+
+<div class="page-head dash-head">
+  <div>
+    <div class="dash-eyebrow"><span>{{ today_label }}</span><span class="sep"></span><span data-tip="Every figure on this page is calculated from the OpsPilot database when the page loads.">Updated {{ d.generated_at|clock }}</span></div>
+    <h1>Operations overview</h1>
+    <p>{% if m.needs_attention %}<strong>{{ m.needs_attention }}</strong> {{ 'project needs' if m.needs_attention == 1 else 'projects need' }} a decision across {{ m.active_projects }} open customer projects.{% else %}All {{ m.active_projects }} open customer projects are moving. Nothing is flagged.{% endif %}</p>
+  </div>
+  <div class="dash-head-actions">
+    <span class="demo-banner" data-tip="Every customer, project and seeded AI sample on this screen is fictional." data-tip-pos="left">{{ ui.icon('info') }}Synthetic demo data</span>
+    <a href="{{ url_for('approvals_page') }}" class="btn">{{ ui.icon('stamp') }}Review approvals{% if m.approvals %}<span class="count dash-count-review">{{ m.approvals }}</span>{% endif %}</a>
+  </div>
+</div>
+
+{# ------------------------------------------------ Metrics ------------------------------------------------ #}
+<section class="dm-grid" aria-label="Key metrics">
+  <a class="card dm" href="{{ url_for('projects') }}">
+    <div class="dm-top"><span class="dm-label">Active projects</span><span class="dm-icon tone-primary">{{ ui.icon('folder') }}</span></div>
+    <div class="dm-value num">{{ m.active_projects }}</div>
+    <div class="dm-foot">{% if m.new_this_week %}<span class="dm-chip tone-primary">+{{ m.new_this_week }}</span>new in 7 days{% else %}{{ m.total_projects - m.active_projects }} completed{% endif %}</div>
+  </a>
+  <a class="card dm" href="{{ url_for('projects', status='Needs Attention') }}">
+    <div class="dm-top"><span class="dm-label">Needs attention</span><span class="dm-icon tone-warning">{{ ui.icon('alert') }}</span></div>
+    <div class="dm-value num">{{ m.needs_attention }}</div>
+    <div class="dm-foot">{% if m.high_priority_attention %}<span class="dm-chip tone-danger">{{ m.high_priority_attention }} high priority</span>{% endif %}{% if m.blocked %}{{ m.blocked }} blocked{% elif not m.high_priority_attention %}Flagged, blocked or in review{% endif %}</div>
+  </a>
+  <a class="card dm" href="{{ url_for('tasks') }}">
+    <div class="dm-top"><span class="dm-label">Open tasks</span><span class="dm-icon tone-info">{{ ui.icon('check-square') }}</span></div>
+    <div class="dm-value num">{{ m.open_tasks }}</div>
+    <div class="dm-foot">{% if m.overdue_tasks %}<span class="dm-chip tone-danger">{{ m.overdue_tasks }} overdue</span>{% else %}<span class="dm-chip tone-success">None overdue</span>{% endif %}{% if m.due_today %}{{ m.due_today }} due today{% endif %}</div>
+  </a>
+  <a class="card dm" href="{{ url_for('approvals_page') }}">
+    <div class="dm-top"><span class="dm-label">Human approvals</span><span class="dm-icon tone-review">{{ ui.icon('stamp') }}</span></div>
+    <div class="dm-value num">{{ m.approvals }}</div>
+    <div class="dm-foot">{% if m.approvals_oldest %}{% set age = m.approvals_oldest|timeago %}{{ 'Added just now' if age == 'just now' else 'Oldest waiting ' ~ age|replace(' ago', '') }}{% else %}<span class="dm-chip tone-success">Queue clear</span>{% endif %}</div>
+  </a>
+  <div class="card dm" data-tip="Actions taken by deterministic business rules today. AI actions are counted separately.">
+    <div class="dm-top"><span class="dm-label" title="Automated actions today">Automated actions today</span><span class="dm-icon tone-automation">{{ ui.icon('cpu') }}</span></div>
+    <div class="dm-value-row">
+      <div class="dm-value num">{{ m.automated_today }}</div>
+      <div class="dm-spark" role="img" aria-label="Business-rule actions per day, last 7 days">
+        {% for day in m.automation_days %}<span class="{{ 'is-today' if loop.last }}" style="height: {{ [day.pct, 6]|max if day.count else 3 }}%" title="{{ day.label }}: {{ day.count }}"></span>{% endfor %}
+      </div>
+    </div>
+    <div class="dm-foot">{{ m.automated_week }} in the last 7 days{% if m.ai_today %}<span class="dm-dot"></span>{{ m.ai_today }} AI today{% endif %}</div>
+  </div>
+</section>
+
+{# ------------------------------------------------ Main ------------------------------------------------ #}
+<div class="dash-main">
+  <section class="card dq" aria-labelledby="dq-title">
+    <div class="card-header dq-header">
+      <div class="dq-heading">
+        <span class="dash-title-icon tone-warning">{{ ui.icon('alert') }}</span>
+        <div>
+          <h2 class="card-title" id="dq-title">Needs attention <span class="count">{{ d.queue_total }}</span></h2>
+          <div class="card-subtitle">Highest priority first</div>
+        </div>
+      </div>
+      <div class="dq-summary">
+        {% if m.high_priority_attention %}<span class="dq-pill"><span class="dq-swatch" style="background:var(--danger-500)"></span>{{ m.high_priority_attention }} high priority</span>{% endif %}
+        {% if m.blocked %}<span class="dq-pill"><span class="dq-swatch seg-blocked"></span>{{ m.blocked }} blocked</span>{% endif %}
+        {% if m.review %}<span class="dq-pill"><span class="dq-swatch seg-review"></span>{{ m.review }} awaiting review</span>{% endif %}
+        <a href="{{ url_for('projects', status='Needs Attention') }}" class="btn btn-ghost btn-sm">View all{{ ui.icon('chevron-right', 'icon-sm') }}</a>
+      </div>
+    </div>
+    {% if d.queue %}
+    <div class="table-wrap">
+      <table class="table dq-table">
+        <thead>
+          <tr><th class="dq-c-customer">Customer</th><th>Issue</th><th class="dq-c-stage">Current stage</th><th class="dq-c-priority">Priority</th><th class="dq-c-action">Recommended action</th><th class="dq-c-go"><span class="sr-only">Open</span></th></tr>
+        </thead>
+        <tbody>
+        {% for q in d.queue %}
+          <tr class="row-link dq-row is-{{ q.status|slug }}" data-href="{{ url_for('project_detail', project_id=q.id) }}">
+            <td class="dq-c-customer">
+              <div class="dq-customer">
+                <span class="avatar avatar-sm">{{ ui.initials(q.first_name, q.last_name) }}</span>
+                <div class="grow"><a class="cell-primary dq-name" href="{{ url_for('project_detail', project_id=q.id) }}">{{ q.customer }}</a><span class="cell-sub">{{ q.service }}</span></div>
+              </div>
+            </td>
+            <td>
+              <div class="dq-issue" title="{{ q.issue }}">{{ q.issue }}</div>
+              <div class="dq-issue-meta">
+                <span class="dq-status is-{{ q.status|slug }}"><span class="dot"></span>{{ {'Human Review Required': 'Human review', 'Needs Attention': 'Needs attention'}.get(q.status, q.status) }}</span>
+                {% if q.more_issues %}<span class="dq-more" data-tip="{{ q.more_issues }} more open business-rule {{ 'finding' if q.more_issues == 1 else 'findings' }}. Open the project to see all.">+{{ q.more_issues }} more</span>{% endif %}
+                {% if q.overdue_tasks %}<span class="dq-overdue">{{ ui.icon('clock', 'icon-xs') }}{{ q.overdue_tasks }} overdue</span>{% endif %}
+              </div>
+            </td>
+            <td class="dq-c-stage">
+              <div class="dq-stage">{{ q.stage }}</div>
+              <div class="dq-stage-meta">{{ stage_steps(q.stage_step, q.stage_total) }}<span class="xsmall muted num">{{ q.stage_step }}/{{ q.stage_total }}</span></div>
+            </td>
+            <td class="dq-c-priority">{{ ui.priority_badge(q.priority) }}</td>
+            <td class="dq-c-action">
+              <div class="dq-action" title="{{ q.action }}">{{ q.action }}</div>
+              <div class="dq-action-meta">
+                {% set src = {'AI recommendation': ('actor-ai', 'sparkle', 'AI'), 'Business rule': ('actor-automation', 'cpu', 'Rule'), 'Combined': ('actor-combined', 'sparkle', 'AI + rules')}[q.action_source] %}
+                <span class="badge dq-src {{ src[0] }}" data-tip="Source: {{ q.action_source }}{{ ' (seeded sample analysis, not from Claude)' if q.action_synthetic }}{{ '. The AI analysis is out of date; re-run it on the project.' if q.action_stale }}">{{ ui.icon(src[1]) }}{{ src[2] }}</span>
+                {% if q.action_owner %}<span class="xsmall muted">{{ q.action_owner }}</span>{% endif %}
+                {% if q.action_synthetic %}<span class="dq-sample">Sample</span>{% endif %}
+                {% if q.action_analysis_id %}<button type="button" class="why-btn dq-why" data-explain="{{ url_for('api_explain', kind='analysis', obj_id=q.action_analysis_id) }}" aria-label="Why? Explain the recommendation for {{ q.customer }}">{{ ui.icon('info') }}Why?</button>{% endif %}
+              </div>
+            </td>
+            <td class="dq-c-go">{{ ui.icon('chevron-right', 'icon-sm') }}</td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% if d.queue_total > d.queue|length %}
+    <div class="card-footer dq-footer"><a href="{{ url_for('projects', status='Needs Attention') }}">Show {{ d.queue_total - d.queue|length }} more {{ 'project' if d.queue_total - d.queue|length == 1 else 'projects' }}</a></div>
+    {% endif %}
+    {% else %}
+      {% call ui.empty_state('check', 'Nothing needs attention', 'Every project is moving. New flags from business rules will appear here.') %}{% endcall %}
+    {% endif %}
+  </section>
+
+  <section class="card dp" aria-labelledby="dp-title">
+    <div class="card-header">
+      <div class="dq-heading">
+        <span class="dash-title-icon tone-primary">{{ ui.icon('layers') }}</span>
+        <div>
+          <h2 class="card-title" id="dp-title">Operations pipeline</h2>
+          <div class="card-subtitle">{{ d.pipeline.total }} projects by workflow stage</div>
+        </div>
+      </div>
+      <div class="dp-header-stats">
+        <span class="dq-pill"><span class="num strong">{{ d.pipeline.open }}</span> open</span>
+        <span class="dq-pill"><span class="dq-swatch seg-attention"></span><span class="num strong">{{ d.pipeline.flagged }}</span> flagged</span>
+        <span class="dq-pill"><span class="num strong">{{ d.pipeline.completed }}</span> completed</span>
+      </div>
+    </div>
+    <div class="dp-stats">
+      <div><span class="v">{{ d.pipeline.open }}</span><span class="l">Open</span></div>
+      <div><span class="v" style="color:var(--warning-700)">{{ d.pipeline.flagged }}</span><span class="l">Flagged</span></div>
+      <div><span class="v">{{ d.pipeline.completed }}</span><span class="l">Completed</span></div>
+    </div>
+    <div class="dp-body">
+      <ol class="dp-stages">
+        {% for s in d.pipeline.stages %}
+        <li>
+          <a class="dp-row" href="{{ url_for('projects', stage=s.stage) }}" aria-label="{{ s.stage }}: {{ s.count }} projects{{ ', ' ~ s.flagged ~ ' need attention' if s.flagged }}">
+            <span class="dp-step num">{{ s.step }}</span>
+            <span class="dp-name" title="{{ s.stage }}"><span class="dp-name-step">{{ s.step }}</span>{{ s.stage }}</span>
+            {% if s.flagged %}<span class="dp-flag">{{ s.flagged }} flagged</span>{% endif %}
+            <span class="dp-count num">{{ s.count }}</span>
+            <span class="dp-bar">{% for g in s.segments %}<span class="seg-{{ g.key }}" style="width: {{ g.pct }}%" title="{{ g.status }}: {{ g.count }}"></span>{% endfor %}</span>
+          </a>
+        </li>
+        {% endfor %}
+      </ol>
+    </div>
+    <div class="dp-legend">
+      {% for l in d.pipeline.legend if l.count %}
+      <span class="dp-legend-item"><span class="dq-swatch seg-{{ l.key }}"></span>{{ 'Human review' if l.status == 'Human Review Required' else l.status }} <span class="num strong">{{ l.count }}</span></span>
+      {% endfor %}
+      <span class="dp-legend-note">Bar colors show project status. Select a stage to see its projects.</span>
+    </div>
+  </section>
+</div>
+
+{# ------------------------------------------------ Secondary ------------------------------------------------ #}
+<div class="dash-secondary">
+  <section class="card da" aria-labelledby="da-title" id="dash-activity">
+    <div class="card-header">
+      <div class="dq-heading">
+        <span class="dash-title-icon tone-neutral">{{ ui.icon('activity') }}</span>
+        <div>
+          <h2 class="card-title" id="da-title">Recent activity</h2>
+          {% set wk = m.week %}
+          <div class="card-subtitle">Last 7 days: <span class="num">{{ wk.AUTOMATION }}</span> by rules · <span class="num" data-tip="Live Claude operations only. Seeded samples are not counted.">{{ wk.AI }}</span> by AI · <span class="num">{{ wk.HUMAN }}</span> by people</div>
+        </div>
+      </div>
+    </div>
+    <div class="da-toolbar">
+      <div class="da-filter" role="group" aria-label="Filter activity">
+        <button type="button" class="da-filter-btn is-active" data-da-filter="all">All</button>
+        <button type="button" class="da-filter-btn" data-da-filter="AI">{{ ui.icon('sparkle', 'icon-xs') }}AI</button>
+        <button type="button" class="da-filter-btn" data-da-filter="AUTOMATION">{{ ui.icon('cpu', 'icon-xs') }}Rules</button>
+        <button type="button" class="da-filter-btn" data-da-filter="HUMAN">{{ ui.icon('user', 'icon-xs') }}Human</button>
+      </div>
+    </div>
+    {% if d.activity %}
+    <ul class="da-feed" id="da-feed">
+      {% for a in d.activity %}
+      <li class="da-item" data-actor="{{ a.actor }}"{{ ' hidden' if loop.index > 8 }}>
+        {{ ui.actor_marker(a.actor) }}
+        <div class="da-content">
+          <div class="da-action">{{ a.action }}</div>
+          <div class="da-meta">
+            {% if a.subject %}{% if a.url %}<a href="{{ a.url }}">{{ a.subject }}</a>{% else %}<span>{{ a.subject }}</span>{% endif %}{% endif %}
+            {% if a.area != 'Project' %}<span class="da-area">{{ a.area }}</span>{% endif %}
+            {% if a.provenance and a.provenance.kind == 'live' %}<span class="badge source-live da-prov" data-tip="Claude response {{ a.provenance.response_id }}{{ ' · model ' ~ a.provenance.model if a.provenance.model }}">{{ ui.icon('check') }}Claude</span>
+            {% elif a.provenance and a.provenance.kind == 'synthetic' %}<span class="badge source-synthetic da-prov" data-tip="Seeded sample for the demo. Not produced by the Anthropic API.">Sample</span>{% endif %}
+            <span class="da-time" data-tip="{{ a.created_at|datetime }}">{{ a.created_at|timeago }}</span>
+          </div>
+        </div>
+      </li>
+      {% endfor %}
+    </ul>
+    <div class="da-empty" id="da-empty" hidden>
+      {% call ui.empty_state('activity', 'No recent actions of this type', 'AI actions appear when OpsPilot calls the Anthropic API: project analysis, message drafts, process analysis and workflow proposals.', compact=True) %}{% endcall %}
+    </div>
+    {% else %}
+      {% call ui.empty_state('clock', 'No activity yet', compact=True) %}{% endcall %}
+    {% endif %}
+  </section>
+
+  <section class="card di" aria-labelledby="di-title" id="dash-insights" data-summary-url="{{ url_for('api_dashboard_summary') }}">
+    <div class="card-header">
+      <div class="dq-heading">
+        <span class="dash-title-icon tone-info">{{ ui.icon('target') }}</span>
+        <div>
+          <h2 class="card-title" id="di-title">Operational insights</h2>
+          <div class="card-subtitle" title="Every figure is counted from the OpsPilot database. None is written by AI.">Counted from live data</div>
+        </div>
+      </div>
+      <button type="button" class="btn btn-sm di-summarize" id="di-summarize" data-tip="Claude rewrites the verified figures below as a short briefing. It is not allowed to add numbers, and OpsPilot checks that it didn't." data-tip-pos="left">{{ ui.icon('sparkle') }}<span class="spinner"></span><span class="btn-text">Summarize</span></button>
+    </div>
+    <div id="di-summary" class="di-summary" hidden></div>
+    <ul class="di-list">
+      {% for i in d.insights %}
+      <li class="di-item" data-insight="{{ i.id }}">
+        <span class="di-icon tone-{{ i.tone }}">{{ ui.icon(i.icon) }}</span>
+        <div class="di-content">
+          <p class="di-text">{{ i.text|emphasize_numbers }}</p>
+          <div class="di-meta">
+            <span class="di-basis" tabindex="0" data-tip="How it's calculated: {{ i.basis }}">{{ ui.icon('database', 'icon-xs') }}Source</span>
+            {% if i.link %}<a href="{{ i.link }}">{{ i.link_label }}{{ ui.icon('chevron-right', 'icon-xs') }}</a>{% endif %}
+          </div>
+        </div>
+      </li>
+      {% else %}
+      <li>{% call ui.empty_state('target', 'No insights yet', 'Insights appear once there are projects and tasks.', compact=True) %}{% endcall %}</li>
+      {% endfor %}
+    </ul>
+  </section>
+
+  <section class="card dw" aria-labelledby="dw-title">
+    <div class="card-header">
+      <div class="dq-heading">
+        <span class="dash-title-icon tone-review">{{ ui.icon('stamp') }}</span>
+        <div>
+          <h2 class="card-title" id="dw-title">Pending approvals</h2>
+          <div class="card-subtitle">AI output waiting for a person</div>
+        </div>
+      </div>
+      <a href="{{ url_for('approvals_page') }}" class="btn btn-ghost btn-sm">Open{{ ui.icon('chevron-right', 'icon-sm') }}</a>
+    </div>
+    <div class="dw-body">
+    <div class="dw-part">
+    {% if d.approvals %}
+    <ul class="dw-list">
+      {% for it in d.approvals %}
+      <li>
+        <a class="dw-item" href="{{ url_for('approvals_page', item=it.id) }}">
+          <span class="dw-icon kind-{{ it.kind }}">{{ ui.icon(it.icon) }}</span>
+          <span class="dw-main">
+            <span class="dw-title">{{ it.title }}</span>
+            <span class="dw-meta">{{ it.kind_label }}{% if it.customer %} · {{ it.customer }}{% endif %} · {{ it.created_at|timeago }}</span>
+          </span>
+          {% if it.confidence is not none %}<span class="dw-conf num{{ ' is-low' if it.confidence < config_threshold }}" data-tip="AI confidence">{{ (it.confidence * 100)|round|int }}%</span>{% endif %}
+        </a>
+      </li>
+      {% endfor %}
+    </ul>
+    {% if d.approval_counts.pending > d.approvals|length %}<a class="dw-more" href="{{ url_for('approvals_page') }}">{{ d.approval_counts.pending - d.approvals|length }} more waiting in the Approval Center</a>{% endif %}
+    {% else %}
+      {% call ui.empty_state('check', 'Nothing waiting for approval', 'AI drafts, recommendations and workflow proposals land here for review.', compact=True) %}{% endcall %}
+    {% endif %}
+    {% set bf = d.approval_counts.by_filter %}
+    <div class="dw-types" aria-label="Pending approvals by type">
+      {% for key, label in [('communications', 'Messages'), ('recommendations', 'Recommendations'), ('workflows', 'Workflows'), ('other', 'Decisions')] %}
+      <a class="dw-type{{ ' is-zero' if not bf[key] }}" href="{{ url_for('approvals_page') }}"><span class="num">{{ bf[key] }}</span>{{ label }}</a>
+      {% endfor %}
+    </div>
+    </div>
+
+    <div class="dw-part dw-part-tasks">
+    <div class="dw-section-head">
+      <span class="dw-section-title">{{ ui.icon('calendar', 'icon-sm') }}Tasks due next</span>
+      <a href="{{ url_for('tasks', view='overdue') if m.overdue_tasks else url_for('tasks') }}" class="xsmall">{{ (m.overdue_tasks ~ ' overdue') if m.overdue_tasks else 'All tasks' }}</a>
+    </div>
+    {% if d.tasks %}
+    <ul class="dw-list dw-tasks">
+      {% for t in d.tasks[:6] %}
+      <li class="dw-task{{ ' is-overdue' if t.is_overdue }}">
+        <span class="dw-main">
+          <a class="dw-title" href="{{ url_for('project_detail', project_id=t.project_id) }}">{{ t.title }}</a>
+          <span class="dw-meta">{{ t.customer_name }} · {{ t.department }}</span>
+        </span>
+        <span class="dw-due nowrap">{{ t.due_date|due }}</span>
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+      {% call ui.empty_state('calendar', 'No upcoming deadlines', compact=True) %}{% endcall %}
+    {% endif %}
+    </div>
+    </div>
+  </section>
+</div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+{% endblock %}

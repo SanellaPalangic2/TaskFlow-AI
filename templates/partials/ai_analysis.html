@@ -1,0 +1,184 @@
+{% import "_macros.html" as ui %}
+{% set analyze_url = url_for('api_analyze', project_id=project.id) %}
+<section class="card" id="ai-analysis-card">
+  <div class="card-header">
+    <div class="card-title">{{ ui.icon('sparkle') }}AI analysis {% if analysis %}{{ ui.source_badge(analysis) }}{% endif %}</div>
+    {% if analysis %}
+    <button type="button" class="btn btn-sm" data-run-analysis="{{ analyze_url }}" data-tip="Send the current project record to Claude for a fresh analysis." data-tip-pos="left">
+      {{ ui.icon('refresh') }}<span class="spinner"></span><span class="btn-text">Analyze project</span>
+    </button>
+    {% endif %}
+  </div>
+  <div class="card-body" data-ai-body>
+    <div data-ai-error></div>
+    {% if analysis %}
+    {% set conf = (analysis.confidence * 100)|round|int %}
+    <div class="stack ai-stack">
+      {% if fresh and analysis.source == 'live' %}
+      <div class="alert alert-success" role="status">{{ ui.icon('check') }}<div><div class="alert-title">Analysis complete</div>Saved as a suggestion. Business rules checked it; nothing changed on the project without a person.</div></div>
+      {% elif analysis_stale %}
+      <div class="alert alert-warning">{{ ui.icon('refresh') }}<div><div class="alert-title">This analysis may be out of date</div>The project record changed after it ran. Analyze the project again for current results.</div></div>
+      {% endif %}
+
+      <div>
+        <div class="ai-label">Summary</div>
+        <p class="ai-summary">{{ analysis.summary }}</p>
+      </div>
+
+      <div class="ai-facts">
+        <div class="ai-fact">
+          <div class="ai-label">Detected intent</div>
+          <span class="badge actor-ai">{{ ui.icon('target') }}{{ analysis.detected_intent }}</span>
+          {% if analysis.intent_detail %}<p class="ai-fact-note">{{ analysis.intent_detail }}</p>{% endif %}
+        </div>
+        <div class="ai-fact">
+          <div class="ai-label">Information status</div>
+          {{ ui.info_status_badge(analysis.information_status or 'Not assessed') }}
+          <p class="ai-fact-note">
+            {% set gaps = analysis.missing_information|length %}
+            {% if gaps %}{{ gaps }} item{{ 's' if gaps != 1 }} still needed{% else %}Nothing missing{% endif %}
+            {% if analysis.info_status_adjusted %}<span class="adjusted" data-tip="The AI's own assessment was replaced because business rules found required information missing, or the notes need clarifying.">{{ ui.icon('cpu', 'icon-sm') }}Set by rules</span>{% endif %}
+          </p>
+        </div>
+        <div class="ai-fact">
+          <div class="ai-label">Confidence
+            <span class="info-dot" data-tip="The model's own estimate. Below {{ '%.0f'|format(config_threshold * 100) }}% always routes to a person. Treat it as a signal, not a guarantee.">{{ ui.icon('info', 'icon-sm') }}</span></div>
+          <div class="confidence"><span class="confidence-bar"><span style="width: {{ conf }}%"></span></span><span class="num strong">{{ conf }}%</span></div>
+          <p class="ai-fact-note">{{ 'High' if conf >= 80 else ('Medium' if conf >= 60 else 'Low') }} confidence</p>
+        </div>
+      </div>
+
+      <div class="grid two-col ai-lists">
+        <div>
+          <div class="ai-label">Missing information <span class="count">{{ analysis.missing_information|length }}</span></div>
+          {% if analysis.missing_information %}
+          <ul class="ai-list">
+            {% for m in analysis.missing_information %}
+            <li>
+              <span class="ai-list-icon">{{ ui.icon({'contact': 'user', 'document': 'file', 'roof': 'home', 'project_detail': 'layers', 'customer_clarification': 'message'}.get(m.category, 'info'), 'icon-sm') }}</span>
+              <div class="grow">
+                <div class="row-between"><span class="strong">{{ m.item }}</span>{{ ui.source_tag(m.source) }}</div>
+                {% if m.why_it_matters %}<p class="ai-list-sub">{{ m.why_it_matters }}</p>{% endif %}
+              </div>
+            </li>
+            {% endfor %}
+          </ul>
+          {% else %}
+          <p class="ai-none">{{ ui.icon('check', 'icon-sm') }}All required information is on file.</p>
+          {% endif %}
+        </div>
+        <div>
+          <div class="ai-label">Contextual concerns <span class="count">{{ analysis.concerns|length }}</span></div>
+          {% if analysis.concerns %}
+          <ul class="ai-list">
+            {% for c in analysis.concerns %}
+            <li>
+              <span class="sev sev-{{ c.severity or 'medium' }}" data-tip="{{ (c.severity or 'medium')|capitalize }} severity"></span>
+              <div class="grow">
+                <div class="row-between"><span class="strong">{{ c.topic }}</span>
+                  <span class="xsmall muted nowrap">{{ {'customer_notes': 'From notes', 'project_data': 'From record', 'business_rules': 'From rules'}[c.source] }}</span></div>
+                <p class="ai-list-sub">{{ c.detail }}</p>
+              </div>
+            </li>
+            {% endfor %}
+          </ul>
+          {% else %}
+          <p class="ai-none">{{ ui.icon('check', 'icon-sm') }}No contextual concerns found.</p>
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="ai-action">
+        <div class="ai-label ai-label-row"><span>Recommended action</span><button type="button" class="why-btn" data-explain="{{ url_for('api_explain', kind='analysis', obj_id=analysis.id) }}" aria-label="Why? Explain this recommendation">{{ ui.icon('info') }}Why?</button></div>
+        <p class="ai-action-text">{{ analysis.recommended_action }}</p>
+        <div class="row wrap" style="gap:8px">
+          <span class="small secondary">Owner: <span class="strong">{{ analysis.suggested_department }}</span></span>
+          {% if analysis.requires_human_review %}
+            <span class="badge status-human-review">{{ ui.icon('shield') }}Human review required</span>
+          {% endif %}
+        </div>
+        {% if analysis.human_review_reasons %}
+        <ul class="why-list compact">
+          {% for r in analysis.human_review_reasons %}
+          <li><span class="why-icon why-{{ r.source }}">{{ ui.icon('cpu' if r.source == 'rule' else 'sparkle', 'icon-sm') }}</span><span>{{ r.text }}</span></li>
+          {% endfor %}
+        </ul>
+        {% endif %}
+      </div>
+
+      {% if analysis.suggested_tasks %}
+      <div>
+        <div class="ai-label">Suggested tasks <span class="muted" style="font-weight:400">AI suggests; business rules decide what is created</span></div>
+        <ul class="ai-list suggest-list">
+          {% for t in analysis.suggested_tasks %}
+          <li>
+            <div class="grow">
+              <div class="strong">{{ t.title }}</div>
+              <div class="ai-list-sub">{{ t.department }}, {{ t.priority }} priority{% if t.reason %}. {{ t.reason }}{% endif %}</div>
+            </div>
+            {% set dec = t.decision %}
+            {% if dec == 'covered' %}
+              <span class="badge actor-automation" data-tip="{{ t.note }}">{{ ui.icon('cpu') }}Created by rule</span>
+            {% elif dec == 'added' %}
+              <span class="badge actor-human" data-tip="{{ t.note }}">{{ ui.icon('check') }}Added</span>
+            {% elif dec == 'duplicate' %}
+              <span class="badge status-completed" data-tip="{{ t.note }}" data-tip-pos="left">Already exists</span>
+            {% elif dec == 'rejected' %}
+              <span class="badge status-completed" data-tip="{{ t.note }}" data-tip-pos="left">{{ ui.icon('x') }}Not needed</span>
+            {% elif dec == 'needs_approval' %}
+              <form method="post" action="{{ url_for('suggested_task_add', analysis_id=analysis.id, index=loop.index0) }}" data-loading-form>
+                <button class="btn btn-sm" data-tip="Not covered by a business rule, so a person decides." data-tip-pos="left">{{ ui.icon('plus') }}<span class="spinner"></span>Add task</button>
+              </form>
+            {% else %}
+              <span class="badge review-pending">Needs approval</span>
+            {% endif %}
+          </li>
+          {% endfor %}
+        </ul>
+      </div>
+      {% endif %}
+
+      <details class="ai-rationale">
+        <summary>{{ ui.icon('chevron-right', 'icon-sm') }}Rationale</summary>
+        <p>{{ analysis.reasoning }}</p>
+        <p class="xsmall muted" style="margin-top:6px">A short, user-facing justification written from the project record. The model's internal reasoning is not stored or shown.</p>
+      </details>
+
+      <div class="provenance">
+        {% if analysis.source == 'live' %}
+          <span>Model <code>{{ analysis.model }}</code></span>
+          <span data-tip="Anthropic's message ID for this exact API response.">Response <code>{{ analysis.response_id }}</code></span>
+          <span>{{ '%.1f'|format(analysis.latency_ms / 1000) }}s</span>
+        {% else %}
+          <span>Seeded sample, not produced by the Anthropic API. Analyze the project to get a live result.</span>
+        {% endif %}
+        <span data-tip="{{ analysis.created_at|datetime }}">{{ analysis.created_at|timeago }}</span>
+      </div>
+    </div>
+    {% else %}
+      <div data-ai-empty>
+        {% call ui.empty_state('sparkle', 'No analysis yet', 'Claude reads the notes, documents, tasks and rule findings, then suggests a next step. Business rules check the result and a person approves it.', compact=True) %}
+          <button type="button" class="btn btn-ai" style="margin-top: var(--space-2)" data-run-analysis="{{ analyze_url }}">
+            {{ ui.icon('sparkle') }}<span class="spinner"></span><span class="btn-text">Analyze project</span>
+          </button>
+        {% endcall %}
+      </div>
+    {% endif %}
+  </div>
+  <template data-ai-loading>
+    <div class="ai-loading" role="status" aria-live="polite">
+      <div class="ai-loading-status"><span class="spinner"></span><span data-ai-stage>Sending project record to Claude…</span></div>
+      <ol class="ai-steps">
+        <li>Reading notes, documents and tasks</li>
+        <li>Validating the structured response</li>
+        <li>Checking suggestions against business rules</li>
+      </ol>
+      <div class="skeleton" style="width: 92%"></div>
+      <div class="skeleton" style="width: 78%"></div>
+      <div class="ai-facts">
+        <div class="skeleton" style="height: 56px"></div><div class="skeleton" style="height: 56px"></div><div class="skeleton" style="height: 56px"></div>
+      </div>
+      <p class="xsmall muted">Usually a few seconds. You can keep working; nothing is saved until the response passes validation.</p>
+    </div>
+  </template>
+</section>

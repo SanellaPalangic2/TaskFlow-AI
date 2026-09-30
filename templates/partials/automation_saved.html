@@ -1,0 +1,28 @@
+{% import "_macros.html" as ui %}
+<section class="card" id="af-saved">
+  <div class="card-header">
+    <div class="card-title">{{ ui.icon('bookmark') }}Saved analyses <span class="count">{{ saved|length }}</span></div>
+  </div>
+  {% if saved %}
+  <ul class="list">
+    {% for a in saved %}
+    <li>
+      <a class="list-item af-saved-item{{ ' is-current' if current_id == a.id }}" href="{{ url_for('automation_view', analysis_id=a.id) }}">
+        <div class="grow">
+          <div class="strong small af-saved-name">{{ a.process_name }}</div>
+          <div class="af-saved-meta">
+            <span>{{ a.total_steps }} steps</span>
+            <span class="af-dot cls-automation" data-tip="Automatable steps"></span>{{ a.automation_opportunities }}
+            <span class="af-dot cls-ai" data-tip="AI candidates"></span>{{ a.ai_opportunities }}
+            <span class="af-dot cls-human" data-tip="Human decisions"></span>{{ a.human_decisions }}
+          </div>
+        </div>
+        <span class="xsmall muted nowrap" data-tip="{{ a.saved_at|datetime }}" data-tip-pos="left">{{ a.saved_at|timeago }}</span>
+      </a>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+    {% call ui.empty_state('bookmark', 'No saved analyses yet', 'Analyze a process, then save it to keep it here for your team.', compact=True) %}{% endcall %}
+  {% endif %}
+</section>

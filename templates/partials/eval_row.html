@@ -1,0 +1,52 @@
+{% import "_macros.html" as ui %}
+{% set c = row.case %}{% set r = row.result %}{% set e = c.expected %}
+{% set checks = {} %}
+{% if r and r.comparison.checks %}{% for ch in r.comparison.checks %}{% set _ = checks.update({ch.key: ch}) %}{% endfor %}{% endif %}
+<tr class="ev-row{{ ' is-clickable' if r }}{{ ' is-out' if not row.in_plan }}" data-case="{{ c.key }}"{% if r %} data-result="{{ r.id }}" tabindex="0"{% endif %}>
+  <td class="ev-c-case">
+    <div class="ev-case"><span class="ev-case-n num">{{ row.n }}</span>
+      <div class="grow"><div class="ev-case-title">{{ c.title }}</div><div class="ev-case-sub" title="{{ c.summary }}">{{ c.summary }}</div></div></div>
+  </td>
+  <td class="ev-c-exp">
+    <div class="ev-kv"><span class="ev-k">Intent</span><span class="ev-v" title="{{ e.intent|join(' or ') }}">{{ e.intent[0] }}{% if e.intent|length > 1 %} <span class="ev-alt">+{{ e.intent|length - 1 }}</span>{% endif %}</span></div>
+    <div class="ev-kv"><span class="ev-k">Team</span><span class="ev-v" title="{{ e.departments|join(' or ') }}">{{ e.departments[0] }}{% if e.departments|length > 1 %} <span class="ev-alt">+{{ e.departments|length - 1 }}</span>{% endif %}</span></div>
+    <div class="ev-kv"><span class="ev-k">Info</span><span class="ev-v">{{ e.information|length + e.must_not_claim|length }} {{ 'item' if (e.information|length + e.must_not_claim|length) == 1 else 'items' }}</span></div>
+  </td>
+  <td class="ev-c-act">
+    {% if r and r.actual %}
+      {% for key, label, val in [('classification', 'Intent', r.actual.detected_intent), ('action', 'Team', r.actual.suggested_department)] %}
+      {% set st = checks[key].state %}
+      <div class="ev-kv is-{{ st }}"><span class="ev-k">{{ label }}</span><span class="ev-v">{{ ui.icon('check' if st == 'pass' else 'x', 'icon-xs') }}{{ val }}</span></div>
+      {% endfor %}
+      {% set ic = checks['information'] %}
+      <div class="ev-kv is-{{ ic.state }}"><span class="ev-k">Info</span><span class="ev-v">{{ ui.icon('check' if ic.state == 'pass' else ('minus' if ic.state == 'partial' else 'x'), 'icon-xs') }}{{ r.comparison.info_found }} of {{ r.comparison.info_total }} correct</span></div>
+    {% elif r %}
+      <div class="ev-error" title="{{ r.error_message }}">{{ ui.icon('alert', 'icon-xs') }}API error: {{ r.error_code }}</div>
+    {% elif not row.in_plan %}
+      <span class="muted small">Not in this run</span>
+    {% else %}
+      <span class="muted small ev-waiting">Not run yet</span>
+    {% endif %}
+  </td>
+  <td class="ev-c-res">
+    {% if r %}
+      {% set cls = {'passed': 'ev-passed', 'review': 'ev-review', 'failed': 'ev-failed'}[r.auto_result] %}
+      <span class="badge {{ cls }}">{{ ui.icon({'passed': 'check', 'review': 'flag', 'failed': 'x'}[r.auto_result]) }}{{ result_labels[r.auto_result] }}</span>
+      {% if row.change and row.change.change != 'same' %}
+      <div class="ev-change is-{{ row.change.change }}" data-tip="Was {{ result_labels[row.change.previous] }} in the compared run">{{ ui.icon('arrow-up' if row.change.change == 'improved' else 'arrow-down', 'icon-xs') }}{{ 'Improved' if row.change.change == 'improved' else 'Regressed' }}</div>
+      {% elif row.change %}<div class="ev-change is-same">No change</div>{% endif %}
+    {% else %}
+      <span class="badge ev-notrun">{{ ui.icon('minus') }}Not run</span>
+    {% endif %}
+  </td>
+  <td class="ev-c-human">
+    {% if r and r.verdict %}
+      <span class="badge ev-v-{{ r.verdict }}">{{ ui.icon({'correct': 'check', 'partially_correct': 'minus', 'incorrect': 'x'}[r.verdict]) }}{{ verdicts[r.verdict] }}</span>
+    {% elif r %}
+      <span class="badge ev-noteval{{ ' is-needed' if r.auto_result != 'passed' }}">{{ ui.icon('user') }}Not evaluated</span>
+    {% else %}<span class="muted small">—</span>{% endif %}
+  </td>
+  <td class="ev-c-go">
+    {% if r %}<button type="button" class="btn btn-sm ev-open" data-result-id="{{ r.id }}" aria-label="Details for {{ c.title }}">Details{{ ui.icon('chevron-right', 'icon-sm') }}</button>{% endif %}
+  </td>
+</tr>

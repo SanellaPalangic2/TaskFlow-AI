@@ -1,0 +1,164 @@
+{% import "_macros.html" as ui %}
+{% set m = result.metrics %}
+{% set stage_icon = {'trigger': 'play', 'automation': 'zap', 'ai': 'sparkle', 'business_rule': 'cpu', 'human_approval': 'shield', 'action': 'check'} %}
+<div class="stack af-result" id="af-result-inner" data-analysis-id="{{ result.id }}" data-save-url="{{ url_for('api_automation_save', analysis_id=result.id) }}">
+
+  {# ---------- Header ---------- #}
+  <section class="card af-head">
+    <div class="af-head-top">
+      <div class="grow">
+        <div class="af-kicker">{{ ui.icon('zap') }}Process analysis</div>
+        <h2 class="af-title" data-af-title>{{ result.process_name }}</h2>
+        <div class="af-sub">
+          {% if result.source == 'live' %}<span class="badge source-live" data-tip="Classified by the Anthropic API ({{ result.model }}), then checked by OpsPilot.">{{ ui.icon('check') }}Live from Claude</span>{% endif %}
+          <span class="muted small" data-tip="{{ result.created_at|datetime }}">Analyzed {{ result.created_at|timeago }}</span>
+          {% if result.trigger %}<span class="small secondary">{{ ui.icon('play', 'icon-sm') }} Starts when: {{ result.trigger }}</span>{% endif %}
+        </div>
+      </div>
+      <div class="af-save" data-af-save-area>
+        {% if result.is_saved %}
+          <span class="badge status-active" data-af-saved-badge>{{ ui.icon('check') }}Saved {{ result.saved_at|timeago }}</span>
+        {% else %}
+          <div class="af-save-form">
+            <label class="sr-only" for="af-save-name">Name for this analysis</label>
+            <input class="input" id="af-save-name" value="{{ result.process_name }}" maxlength="80">
+            <button type="button" class="btn btn-primary" data-af-save>{{ ui.icon('bookmark') }}<span class="spinner"></span><span class="btn-text">Save analysis</span></button>
+          </div>
+        {% endif %}
+      </div>
+    </div>
+    <p class="af-summary">{{ result.summary }}</p>
+  </section>
+
+  {% if result.adjustments %}
+  <div class="alert alert-review" role="note">{{ ui.icon('shield') }}
+    <div><div class="alert-title">OpsPilot kept a person in charge of {{ result.adjustments|length }} step{{ 's' if result.adjustments|length != 1 }}</div>
+      AI suggested automating {{ 'these steps' if result.adjustments|length != 1 else 'this step' }}, but {{ 'they involve' if result.adjustments|length != 1 else 'it involves' }} decisions with real consequences:
+      <ul class="af-adjust-list">
+        {% for a in result.adjustments %}<li><strong>Step {{ a.step }}: {{ a.name }}</strong>. {{ a.reason }}</li>{% endfor %}
+      </ul>
+    </div>
+  </div>
+  {% endif %}
+
+  {# ---------- Metrics (all counted in Python) ---------- #}
+  <section class="grid af-metrics" aria-label="Metrics">
+    {% for key, label, cls, icon in [('total', 'Total steps', 'cls-neutral', 'layers'), ('automatable', 'Automatable steps', 'cls-automation', 'zap'), ('ai', 'AI candidates', 'cls-ai', 'sparkle'), ('human', 'Human decision points', 'cls-human', 'shield')] %}
+    <div class="card metric af-metric">
+      <span class="metric-label"><span class="af-metric-icon {{ cls }}">{{ ui.icon(icon, 'icon-sm') }}</span>{{ label }}</span>
+      <span class="metric-value">{{ m[key] }}</span>
+      <span class="af-how">{{ m.explain[key] }}</span>
+    </div>
+    {% endfor %}
+  </section>
+  <p class="xsmall muted af-metric-note">{{ ui.icon('info', 'icon-sm') }} These are counts of the classified steps below, calculated by OpsPilot. They are not estimates of time or cost savings.{% if result.claims_removed %} {{ result.claims_removed }} unsupported efficiency claim{{ 's were' if result.claims_removed != 1 else ' was' }} removed from the AI's text.{% endif %}</p>
+
+  {# ---------- Steps ---------- #}
+  <section class="card">
+    <div class="card-header">
+      <div class="card-title">{{ ui.icon('check-square') }}Process steps <span class="count">{{ m.total }}</span></div>
+      <div class="af-mix" role="img" aria-label="Step mix">
+        {% for key, c in classes.items() %}{% if m.by_class[key] %}<span class="af-mix-seg {{ c.css }}" style="flex: {{ m.by_class[key] }}" data-tip="{{ c.label }}: {{ m.by_class[key] }}"></span>{% endif %}{% endfor %}
+      </div>
+    </div>
+    <ol class="af-steps">
+      {% for s in result.steps %}
+      {% set c = classes[s.classification] %}
+      <li class="af-step">
+        <span class="af-step-num {{ c.css }}">{{ s.number }}</span>
+        <div class="af-step-main">
+          <div class="af-step-head">
+            <span class="af-step-name">{{ s.name }}</span>
+            <span class="af-step-tags"><span class="badge {{ c.css }}">{{ ui.icon(c.icon) }}{{ c.label }}</span>
+              <button type="button" class="why-btn" data-explain="{{ url_for('api_explain', kind='automation', obj_id=result.id, step=s.number) }}" aria-label="Why? Explain step {{ s.number }}">{{ ui.icon('info') }}Why?</button></span>
+          </div>
+          {% if s.description %}<p class="af-step-desc">{{ s.description }}</p>{% endif %}
+          {% if s.justification %}<p class="af-step-why"><span class="af-why-label">Why:</span> {{ s.justification }}</p>{% endif %}
+          {% if s.adjusted %}
+          <p class="af-step-adjusted">{{ ui.icon('shield', 'icon-sm') }}<span>AI suggested <strong>{{ classes[s.ai_classification].label }}</strong>. OpsPilot's policy keeps a person in charge of this step.</span></p>
+          {% endif %}
+        </div>
+      </li>
+      {% endfor %}
+    </ol>
+  </section>
+
+  {# ---------- Current vs proposed ---------- #}
+  <div class="grid two-col af-flows">
+    <section class="card">
+      <div class="card-header"><div class="card-title">{{ ui.icon('user') }}Current process</div><span class="card-subtitle">Done by hand today</span></div>
+      <div class="card-body">
+        <ol class="af-flow">
+          {% if result.trigger %}
+          <li class="af-node af-node-trigger"><span class="af-node-tag">Trigger</span><span class="af-node-title">{{ result.trigger }}</span></li>
+          {% endif %}
+          {% for s in result.steps %}
+          <li class="af-node af-node-current"><span class="af-node-num">{{ s.number }}</span><span class="af-node-title">{{ s.name }}</span>
+            <span class="af-dot {{ classes[s.classification].css }}" data-tip="Opportunity: {{ classes[s.classification].label }}" data-tip-pos="left"></span></li>
+          {% endfor %}
+        </ol>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-header"><div class="card-title">{{ ui.icon('workflow') }}Proposed process</div><span class="card-subtitle">Checked by OpsPilot</span></div>
+      <div class="card-body">
+        <ol class="af-flow">
+          {% for st in result.proposed %}
+          <li class="af-node af-stage stage-{{ st.stage }}">
+            <div class="af-stage-head">
+              <span class="af-stage-tag">{{ ui.icon(stage_icon[st.stage], 'icon-sm') }}{{ st.label }}</span>
+              {% if st.steps %}<span class="xsmall muted">Step{{ 's' if st.steps|length > 1 }} {{ st.steps|join(', ') }}</span>{% endif %}
+            </div>
+            <div class="af-node-title">{{ st.title }}</div>
+            {% if st.description %}<div class="af-node-desc">{{ st.description }}</div>{% endif %}
+            {% if st.added_by_policy or st.note %}<div class="af-node-policy">{{ ui.icon('shield', 'icon-sm') }}<span>{{ st.note or 'Added by OpsPilot so the workflow has a clear start, human approval and finish.' }}</span></div>{% endif %}
+          </li>
+          {% endfor %}
+        </ol>
+      </div>
+    </section>
+  </div>
+
+  {# ---------- Risks and human review ---------- #}
+  <div class="grid two-col">
+    <section class="card">
+      <div class="card-header"><div class="card-title">{{ ui.icon('alert') }}Risks and considerations <span class="count">{{ result.risks|length }}</span></div></div>
+      {% if result.risks %}
+      <ul class="ai-list af-plain-list">
+        {% for r in result.risks %}
+        <li><span class="sev sev-{{ r.severity }}" data-tip="{{ r.severity|capitalize }} impact"></span>
+          <div class="grow"><div class="row-between"><span class="strong">{{ r.title }}</span><span class="xsmall muted">{{ r.severity|capitalize }}</span></div>
+          {% if r.detail %}<p class="ai-list-sub">{{ r.detail }}</p>{% endif %}</div></li>
+        {% endfor %}
+      </ul>
+      {% else %}{% call ui.empty_state('check', 'No risks listed', compact=True) %}{% endcall %}{% endif %}
+    </section>
+    <section class="card">
+      <div class="card-header"><div class="card-title">{{ ui.icon('shield') }}Human review points <span class="count">{{ result.review_points|length }}</span></div></div>
+      {% if result.review_points %}
+      <ul class="ai-list af-plain-list">
+        {% for p in result.review_points %}
+        <li><span class="ai-list-icon af-human-icon">{{ ui.icon('user', 'icon-sm') }}</span>
+          <div class="grow"><div class="row-between"><span class="strong">{{ p.point }}</span>
+            {% if p.source == 'policy' %}<span class="badge actor-automation" data-tip="Added by OpsPilot's human-judgment policy, not by the AI.">{{ ui.icon('cpu') }}Policy</span>{% else %}<span class="badge actor-ai">{{ ui.icon('sparkle') }}AI</span>{% endif %}</div>
+          {% if p.reason %}<p class="ai-list-sub">{{ p.reason }}</p>{% endif %}</div></li>
+        {% endfor %}
+      </ul>
+      {% else %}{% call ui.empty_state('user', 'No human review points', compact=True) %}{% endcall %}{% endif %}
+    </section>
+  </div>
+
+  <details class="card af-original">
+    <summary class="card-header">{{ ui.icon('chevron-right', 'icon-sm') }}<span class="card-title" style="font-size:var(--text-base)">Original description and provenance</span></summary>
+    <div class="card-body stack" style="gap:var(--space-3)">
+      <blockquote class="timeline-detail" style="margin:0;font-size:var(--text-base);color:var(--text);white-space:pre-wrap">{{ result.description }}</blockquote>
+      <div class="provenance">
+        <span>Model <code>{{ result.model }}</code></span>
+        <span data-tip="Anthropic's message ID for this response.">Response <code>{{ result.response_id }}</code></span>
+        {% if result.latency_ms %}<span>{{ '%.1f'|format(result.latency_ms / 1000) }}s</span>{% endif %}
+        <span>Metrics recalculated from {{ m.total }} stored steps each time this page loads</span>
+      </div>
+    </div>
+  </details>
+</div>

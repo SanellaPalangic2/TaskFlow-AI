@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+
+{% block crumbs %}
+<div class="crumbs"><a href="{{ url_for('workflows_page') }}">Workflows</a>{{ ui.icon('chevron-right') }}<span>{{ design.name if design else 'New workflow' }}</span></div>
+{% endblock %}
+
+{% block content %}
+<div class="wb" id="wb" data-generate-url="{{ url_for('api_workflow_generate') }}"
+     data-status-url-template="{{ url_for('api_workflow_status', design_id=0) }}" data-view-url-template="{{ url_for('workflow_view', design_id=0) }}">
+
+  {# ---------------- Header ---------------- #}
+  <section class="card wb-header">
+    <div class="wb-header-main">
+      <span class="wb-mark">{{ ui.icon('workflow') }}</span>
+      <div class="wb-title-wrap">
+        <label class="sr-only" for="wb-name">Workflow name</label>
+        <input class="wb-name" id="wb-name" maxlength="80" placeholder="Untitled workflow" value="{{ design.name if design else '' }}" autocomplete="off">
+        <div class="wb-meta" id="wb-meta"></div>
+      </div>
+    </div>
+    <div class="wb-actions" id="wb-actions"></div>
+  </section>
+
+  {# ---------------- Description ---------------- #}
+  <details class="card wb-describe" id="wb-describe" {{ 'open' if not design }}>
+    <summary class="wb-describe-head">
+      {{ ui.icon('chevron-right', 'icon-sm') }}
+      <span class="strong">Workflow description</span>
+      <span class="wb-describe-preview muted small" id="wb-desc-preview">{{ (design.description[:140] ~ ('…' if design.description|length > 140 else '')) if design else 'Describe the workflow in plain English' }}</span>
+    </summary>
+    <div class="wb-describe-body">
+      <div class="field grow" id="wb-desc-field">
+        <label class="sr-only" for="wb-desc">Workflow description</label>
+        <textarea class="textarea wb-textarea" id="wb-desc" maxlength="{{ max_chars }}"
+          placeholder="e.g. When a new project arrives, check whether required documents exist. If documents are missing, create a task. If everything exists, send the project for human review.">{{ design.description if design else '' }}</textarea>
+        <div class="row-between"><span class="help" id="wb-desc-help">Say what starts it, what gets checked, who decides, and how each path ends.</span>
+          <span class="char-count"><span data-wb-count>0</span> / {{ '{:,}'.format(max_chars) }}</span></div>
+      </div>
+      <div class="wb-describe-side">
+        <div class="label">Examples</div>
+        {% for ex in examples %}
+        <button type="button" class="wb-example" data-wb-example="{{ loop.index0 }}">{{ ui.icon(ex.icon, 'icon-sm') }}<span>{{ ex.name }}</span></button>
+        {% endfor %}
+        <button type="button" class="btn btn-ai wb-generate" id="wb-generate">{{ ui.icon('sparkle') }}<span class="spinner"></span><span class="btn-text">{{ 'Regenerate proposal' if design else 'Generate workflow' }}</span></button>
+        <p class="xsmall muted" id="wb-generate-note">AI proposes the workflow. OpsPilot validates it, and a person approves it before it can be Active.</p>
+      </div>
+    </div>
+    <div id="wb-describe-alert"></div>
+  </details>
+
+  {# ---------------- Workspace ---------------- #}
+  <div class="wb-main">
+    <section class="card wb-canvas-card" aria-label="Workflow canvas">
+      <div class="wb-toolbar">
+        <div class="wb-legend">
+          {% for key, t in node_types.items() %}<span class="wb-legend-item {{ t.css }}" title="{{ t.label }}"><span class="wb-legend-icon">{{ ui.icon(t.icon, 'icon-sm') }}</span><span class="wb-legend-text">{{ t.label }}</span></span>{% endfor %}
+        </div>
+        <div class="wb-zoom" role="group" aria-label="Zoom">
+          <button type="button" class="btn btn-ghost btn-icon btn-sm" data-wb-zoom="out" aria-label="Zoom out" title="Zoom out">{{ ui.icon('minus') }}</button>
+          <span class="wb-zoom-level num" id="wb-zoom-level">100%</span>
+          <button type="button" class="btn btn-ghost btn-icon btn-sm" data-wb-zoom="in" aria-label="Zoom in" title="Zoom in">{{ ui.icon('plus') }}</button>
+          <button type="button" class="btn btn-ghost btn-sm" data-wb-zoom="fit" title="Fit to screen">{{ ui.icon('maximize') }}Fit</button>
+        </div>
+      </div>
+      <div class="wb-canvas" id="wb-canvas" tabindex="-1">
+        <div class="wb-stage-wrap" id="wb-stage-wrap"><div class="wb-stage" id="wb-stage"></div></div>
+        <div class="wb-overlay" id="wb-empty" {{ 'hidden' if design }}>
+          <div class="wb-empty-art" aria-hidden="true">
+            <span class="wb-ghost wf-trigger"></span><span class="wb-ghost-line"></span>
+            <span class="wb-ghost wf-condition"></span>
+            <span class="wb-ghost-split"><span></span><span></span></span>
+            <span class="wb-ghost-row"><span class="wb-ghost wf-automation"></span><span class="wb-ghost wf-human"></span></span>
+          </div>
+          <div class="empty-title">Your workflow will appear here</div>
+          <p class="empty-text">Describe it above, or start from an example. OpsPilot draws the proposal as a diagram you can inspect step by step.</p>
+        </div>
+        <div class="wb-overlay wb-loading" id="wb-loading" hidden role="status" aria-live="polite">
+          <div class="ai-loading-status"><span class="spinner"></span><span>Designing the workflow with Claude…</span></div>
+          <ol class="ai-steps">
+            <li class="is-active">Reading the description</li>
+            <li>Proposing steps, conditions and connections</li>
+            <li>Validating the structure and applying approval rules</li>
+            <li>Laying out the diagram</li>
+          </ol>
+        </div>
+      </div>
+      <div class="wb-canvas-foot" id="wb-canvas-foot"></div>
+    </section>
+
+    <aside class="card wb-panel" id="wb-panel" aria-live="polite"></aside>
+  </div>
+</div>
+
+<script id="wb-data" type="application/json">{{ design|tojson }}</script>
+<script id="wb-config" type="application/json">{{ {'node_types': node_types, 'type_order': node_types.keys()|list, 'ai_levels': ai_levels, 'examples': examples, 'min_chars': min_chars}|tojson }}</script>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/workflow_builder.js') }}"></script>
+{% endblock %}

@@ -1,0 +1,149 @@
+{% extends "base.html" %}
+
+{% block header_actions %}
+<button type="button" class="btn btn-ai" data-open-modal="ac-draft-modal">{{ ui.icon('sparkle') }}<span class="btn-label">Draft communication</span></button>
+{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Human Approval Center</h1>
+    <p>Review AI-generated actions before anything customer-facing or consequential happens.</p>
+  </div>
+</div>
+
+<div class="ac" id="ac" data-list-url="{{ url_for('api_approvals') }}" data-decide-url-template="{{ url_for('api_approvals_decide', item_id=0) }}"
+     data-draft-url="{{ url_for('api_approvals_draft') }}">
+
+  <section class="card ac-summary" aria-label="Queue summary">
+    <div class="ac-summary-main">
+      <span class="ac-summary-icon">{{ ui.icon('stamp') }}</span>
+      <div>
+        <div class="ac-summary-value num" data-ac-pending>{{ data.counts.pending }}</div>
+        <div class="ac-summary-label">Pending approvals</div>
+      </div>
+    </div>
+    <div class="ac-summary-why">
+      {{ ui.icon('shield') }}
+      <div><strong>Why?</strong> Human approval is required before customer-facing or consequential actions.
+        <span class="muted">AI drafts and recommends. Nothing is sent or changed until a person approves.</span></div>
+    </div>
+    <div class="ac-summary-stats">
+      <div><span class="num strong" data-ac-count="communications">{{ data.counts.by_filter.communications }}</span><span>Communications</span></div>
+      <div><span class="num strong" data-ac-count="recommendations">{{ data.counts.by_filter.recommendations }}</span><span>Recommendations</span></div>
+      <div><span class="num strong" data-ac-count="workflows">{{ data.counts.by_filter.workflows }}</span><span>Workflows</span></div>
+      <div><span class="num strong" data-ac-count="other">{{ data.counts.by_filter.other }}</span><span>Other</span></div>
+      <div class="ac-stat-sep"><span class="num strong" data-ac-decided>{{ data.counts.decided_today }}</span><span>Decided today</span></div>
+    </div>
+  </section>
+
+  <section class="card ac-queue">
+    <div class="ac-toolbar">
+      <nav class="tabs ac-tabs" aria-label="Filter by type">
+        {% for key, label in filters %}
+        <button type="button" class="tab{{ ' is-active' if key == 'all' }}" data-ac-filter="{{ key }}">{{ label }} <span class="count" data-ac-tab-count="{{ key }}">{{ data.counts.by_filter[key] }}</span></button>
+        {% endfor %}
+      </nav>
+      <div class="ac-view" role="group" aria-label="Show">
+        <button type="button" class="ac-view-btn is-active" data-ac-view="pending">Pending</button>
+        <button type="button" class="ac-view-btn" data-ac-view="history">History</button>
+      </div>
+    </div>
+    <div class="ac-split">
+      <div class="ac-list" id="ac-list" role="listbox" aria-label="Approval items"></div>
+      <div class="ac-detail" id="ac-detail" aria-live="polite"></div>
+    </div>
+  </section>
+</div>
+
+{# ---------------- Edit modal: original preserved, editable copy beside it ---------------- #}
+<dialog class="modal ac-edit-modal" id="ac-edit-modal" aria-labelledby="ac-edit-title">
+  <div class="modal-header">
+    <div><div class="modal-title" id="ac-edit-title">Edit before approving</div>
+      <div class="modal-desc">The original AI output is preserved in the audit record. Your version is saved alongside it.</div></div>
+    <button type="button" class="btn btn-ghost btn-icon" data-close-modal aria-label="Close">{{ ui.icon('x') }}</button>
+  </div>
+  <div class="modal-body">
+    <div class="ac-edit-grid">
+      <section class="ac-edit-col ac-original">
+        <div class="ac-edit-col-head">{{ ui.icon('sparkle', 'icon-sm') }}Original AI output <span class="badge ac-locked">{{ ui.icon('shield') }}Preserved</span></div>
+        <div id="ac-edit-original"></div>
+      </section>
+      <section class="ac-edit-col">
+        <div class="ac-edit-col-head">{{ ui.icon('edit', 'icon-sm') }}Your version <span class="xsmall muted" id="ac-edit-changes">No changes yet</span></div>
+        <div id="ac-edit-fields" class="stack" style="gap:var(--space-3)"></div>
+      </section>
+    </div>
+    <div class="field">
+      <label class="label" for="ac-edit-note">Reviewer note<span class="opt">Optional</span></label>
+      <input class="input" id="ac-edit-note" maxlength="500" placeholder="Why you changed it, for the audit trail">
+    </div>
+  </div>
+  <div class="modal-footer">
+    <button type="button" class="btn left" data-close-modal>Cancel</button>
+    <button type="button" class="btn" id="ac-edit-reset">{{ ui.icon('rotate') }}Reset to original</button>
+    <button type="button" class="btn btn-primary" id="ac-edit-approve">{{ ui.icon('check') }}<span class="spinner"></span><span class="btn-text">Approve edited version</span></button>
+  </div>
+</dialog>
+
+{# ---------------- Confirm approve / reject ---------------- #}
+<dialog class="modal" id="ac-confirm-modal" aria-labelledby="ac-confirm-title">
+  <div class="modal-header">
+    <div><div class="modal-title" id="ac-confirm-title"></div><div class="modal-desc" id="ac-confirm-desc"></div></div>
+    <button type="button" class="btn btn-ghost btn-icon" data-close-modal aria-label="Close">{{ ui.icon('x') }}</button>
+  </div>
+  <div class="modal-body">
+    <div class="ac-effect" id="ac-confirm-effect"></div>
+    <div class="field">
+      <label class="label" for="ac-confirm-note">Note<span class="opt" id="ac-confirm-note-opt">Optional</span></label>
+      <textarea class="textarea" id="ac-confirm-note" rows="2" maxlength="500"></textarea>
+    </div>
+  </div>
+  <div class="modal-footer">
+    <button type="button" class="btn" data-close-modal>Cancel</button>
+    <button type="button" class="btn btn-primary" id="ac-confirm-go"><span class="spinner"></span><span class="btn-text">Confirm</span></button>
+  </div>
+</dialog>
+
+{# ---------------- Draft a communication (real Claude API) ---------------- #}
+<dialog class="modal" id="ac-draft-modal" aria-labelledby="ac-draft-title">
+  <div class="modal-header">
+    <div><div class="modal-title" id="ac-draft-title">Draft a customer communication</div>
+      <div class="modal-desc">Claude drafts the message from minimal project context. It goes into this queue for review. Nothing is sent.</div></div>
+    <button type="button" class="btn btn-ghost btn-icon" data-close-modal aria-label="Close">{{ ui.icon('x') }}</button>
+  </div>
+  <div class="modal-body">
+    <div class="field">
+      <label class="label" for="ac-draft-project">Project</label>
+      <select class="select" id="ac-draft-project">
+        {% for p in project_options %}
+        <option value="{{ p.id }}" data-missing="{{ p.missing|join(', ') }}" data-roof="{{ '1' if p.roof_review }}">{{ p.name }}, {{ p.service }}{% if p.missing %}: needs {{ p.missing|join(', ') }}{% endif %}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="stack" style="gap:var(--space-2)">
+      <div class="label">What is the message for?</div>
+      {% for key, (label, desc) in purposes.items() %}
+      <label class="checkbox"><input type="radio" name="ac-purpose" value="{{ key }}" {{ 'checked' if loop.first }}>
+        <span><span class="strong">{{ label }}</span><span class="help" style="display:block">{{ desc }}</span></span></label>
+      {% endfor %}
+    </div>
+    <details class="ac-privacy">
+      <summary>{{ ui.icon('shield', 'icon-sm') }}What is sent to Claude</summary>
+      <p>Only the customer's first name, the service, the project stage in plain words, the names of missing documents or contact fields, and whether a roof review is pending. Never the last name, email, phone, address, bill amount, roof age or notes.</p>
+    </details>
+    <div id="ac-draft-alert"></div>
+  </div>
+  <div class="modal-footer">
+    <button type="button" class="btn" data-close-modal>Cancel</button>
+    <button type="button" class="btn btn-ai" id="ac-draft-go">{{ ui.icon('sparkle') }}<span class="spinner"></span><span class="btn-text">Draft with AI</span></button>
+  </div>
+</dialog>
+
+<script id="ac-data" type="application/json">{{ data|tojson }}</script>
+<script id="ac-config" type="application/json">{{ {'kinds': kinds, 'departments': departments}|tojson }}</script>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/approvals.js') }}"></script>
+{% endblock %}

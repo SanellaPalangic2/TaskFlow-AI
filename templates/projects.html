@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+
+{% block header_actions %}
+<a href="{{ url_for('project_new') }}" class="btn btn-primary">{{ ui.icon('plus') }}<span class="btn-label">New project</span></a>
+{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Projects</h1>
+    <p>Every customer project, its workflow stage and what it's waiting on.</p>
+  </div>
+</div>
+
+<section class="card">
+  <nav class="tabs" aria-label="Filter by status" style="padding: 0 var(--space-3)">
+    {% set base_args = {'q': filters.q, 'stage': filters.stage, 'priority': filters.priority} %}
+    <a class="tab{% if not filters.status %} is-active{% endif %}" href="{{ url_for('projects', **base_args) }}">All <span class="count">{{ total }}</span></a>
+    {% for s in STATUSES %}
+    <a class="tab{% if filters.status == s %} is-active{% endif %}" href="{{ url_for('projects', status=s, **base_args) }}">{{ s }} <span class="count">{{ status_counts.get(s, 0) }}</span></a>
+    {% endfor %}
+  </nav>
+
+  <form class="filter-bar" method="get" id="project-filters">
+    {% if filters.status %}<input type="hidden" name="status" value="{{ filters.status }}">{% endif %}
+    <div class="input-group">
+      {{ ui.icon('search', 'lead') }}
+      <label class="sr-only" for="q">Search projects</label>
+      <input class="input input-search" id="q" name="q" value="{{ filters.q }}" placeholder="Search name, service, email, address" data-live-filter="#project-table">
+    </div>
+    <label class="sr-only" for="stage">Stage</label>
+    <select class="select" id="stage" name="stage" data-autosubmit>
+      <option value="">All stages</option>
+      {% for s in STAGES %}<option value="{{ s }}" {{ 'selected' if filters.stage == s }}>{{ s }}</option>{% endfor %}
+    </select>
+    <label class="sr-only" for="priority">Priority</label>
+    <select class="select" id="priority" name="priority" data-autosubmit>
+      <option value="">All priorities</option>
+      {% for p in PRIORITIES %}<option value="{{ p }}" {{ 'selected' if filters.priority == p }}>{{ p }} priority</option>{% endfor %}
+    </select>
+    {% if filters.q or filters.stage or filters.priority or filters.status %}
+      <a href="{{ url_for('projects') }}" class="btn btn-ghost btn-sm">{{ ui.icon('x') }}Clear filters</a>
+    {% endif %}
+    <span class="results-meta"><span data-visible-count>{{ projects|length }}</span> of {{ total }} projects</span>
+  </form>
+
+  {% if projects %}
+  <div class="table-wrap">
+    <table class="table" id="project-table">
+      <thead>
+        <tr>
+          <th>Customer</th><th>Service</th><th>Stage</th><th>Status</th><th>Priority</th><th>Updated</th><th class="actions"><span class="sr-only">Action</span></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for p in projects %}
+        <tr class="row-link" data-href="{{ url_for('project_detail', project_id=p.id) }}"
+            data-search="{{ (p.customer_name ~ ' ' ~ p.service_type ~ ' ' ~ (p.email or '') ~ ' ' ~ (p.address or ''))|lower }}">
+          <td>
+            <div class="row">
+              <span class="avatar avatar-sm">{{ ui.initials(p.first_name, p.last_name) }}</span>
+              <div>
+                <a class="cell-primary" href="{{ url_for('project_detail', project_id=p.id) }}" style="color:inherit">{{ p.customer_name }}</a>
+                <span class="cell-sub">{{ p.address or 'No address on file' }}</span>
+              </div>
+            </div>
+          </td>
+          <td>{{ p.service_type }}<span class="cell-sub">{% if p.monthly_electric_bill %}{{ p.monthly_electric_bill|money }}/mo bill{% else %}No bill on record{% endif %}</span></td>
+          <td class="nowrap">{{ p.current_stage }}</td>
+          <td>{{ ui.status_badge(p.project_status) }}</td>
+          <td>{{ ui.priority_badge(p.priority) }}</td>
+          <td class="nowrap secondary" data-tip="{{ p.updated_at|datetime }}">{{ p.updated_at|timeago }}</td>
+          <td class="actions"><a class="btn btn-sm" href="{{ url_for('project_detail', project_id=p.id) }}">Open{{ ui.icon('chevron-right', 'icon-sm') }}</a></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <div class="empty compact" data-no-results hidden>
+    <div class="empty-icon">{{ ui.icon('search', 'icon-lg') }}</div>
+    <div class="empty-title">No matching projects</div>
+    <p class="empty-text">Try a different name, service or address.</p>
+  </div>
+  {% else %}
+    {% call ui.empty_state('folder', 'No projects match these filters', 'Clear the filters to see every project, or create a new one.') %}
+      <div class="row" style="margin-top:var(--space-2)">
+        <a class="btn" href="{{ url_for('projects') }}">Clear filters</a>
+        <a class="btn btn-primary" href="{{ url_for('project_new') }}">{{ ui.icon('plus') }}New project</a>
+      </div>
+    {% endcall %}
+  {% endif %}
+</section>
+{% endblock %}

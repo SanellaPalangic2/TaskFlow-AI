@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="card planned-panel">
+  <div class="card-body">
+    {% call ui.empty_state('alert', message, 'Error ' ~ code) %}
+      <div class="row wrap" style="justify-content:center; margin-top: var(--space-3)">
+        <a class="btn btn-primary" href="{{ url_for('dashboard') }}">{{ ui.icon('grid') }}Go to dashboard</a>
+      </div>
+    {% endcall %}
+  </div>
+</section>
+{% endblock %}

@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+
+{% block crumbs %}
+{% if result %}<div class="crumbs"><a href="{{ url_for('automation_page') }}">Automation Finder</a>{{ ui.icon('chevron-right') }}<span>{{ 'Saved analysis' if result.is_saved else 'Unsaved analysis' }}</span></div>{% endif %}
+{% endblock %}
+
+{% block header_actions %}
+{% if result %}<a href="{{ url_for('automation_page') }}" class="btn">{{ ui.icon('plus') }}<span class="btn-label">New analysis</span></a>{% endif %}
+{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Automation Opportunity Finder</h1>
+    <p>Describe a repetitive process and OpsPilot will identify where AI, automation, and human judgment may fit.</p>
+  </div>
+</div>
+
+<div class="grid af-layout" id="af" data-analyze-url="{{ url_for('api_automation_analyze') }}" data-ai-configured="{{ '1' if ai_configured else '0' }}">
+  <div class="stack af-main">
+    {% if not result %}
+    <section class="card" id="af-input-card">
+      <form id="af-form" novalidate data-own-loading>
+        <div class="card-body af-input-body">
+          <div class="field">
+            <label class="label" for="af-name">Process name<span class="opt">Optional</span></label>
+            <input class="input" id="af-name" maxlength="80" placeholder="e.g. Document intake" autocomplete="off">
+          </div>
+          <div class="field" id="af-desc-field">
+            <label class="label" for="af-desc">How does the process work today?</label>
+            <textarea class="textarea af-textarea" id="af-desc" maxlength="{{ max_chars }}"
+              placeholder="Describe it step by step, the way you'd explain it to a new teammate. What starts it, what you do, what you check, who decides, and what happens at the end."></textarea>
+            <div class="row-between"><span class="help" id="af-desc-help">Plain English is best. Mention who decides things and when customers are contacted.</span>
+              <span class="char-count"><span data-af-count>0</span> / {{ '{:,}'.format(max_chars) }}</span></div>
+          </div>
+          <div>
+            <div class="label" style="margin-bottom:8px">Or start from an example</div>
+            <div class="af-examples">
+              {% for ex in examples %}
+              <button type="button" class="af-example" data-af-example="{{ loop.index0 }}">
+                <span class="cp-suggest-icon">{{ ui.icon(ex.icon) }}</span>
+                <span><span class="strong">{{ ex.name }}</span><span class="af-example-text">{{ ex.text[:92] }}…</span></span>
+              </button>
+              {% endfor %}
+            </div>
+          </div>
+        </div>
+        <div class="card-footer row-between">
+          <span class="small muted">{{ ui.icon('shield', 'icon-sm') }} Decisions with real consequences always stay with a person.</span>
+          <button type="submit" class="btn btn-ai af-submit" id="af-submit">{{ ui.icon('play') }}<span class="spinner"></span><span class="btn-text">Analyze process</span></button>
+        </div>
+      </form>
+    </section>
+    <div id="af-error"></div>
+    {% endif %}
+
+    <div id="af-result">
+      {% if result %}{% include "partials/automation_result.html" %}{% endif %}
+    </div>
+  </div>
+
+  <aside class="stack af-rail">
+    <section class="card">
+      <div class="card-header"><div class="card-title">{{ ui.icon('layers') }}How steps are classified</div></div>
+      <ul class="af-legend">
+        {% for key, c in classes.items() %}
+        <li><span class="badge {{ c.css }}">{{ ui.icon(c.icon) }}{{ c.label }}</span><span class="af-legend-text">{{ c.meaning }}</span></li>
+        {% endfor %}
+      </ul>
+      <div class="card-footer xsmall secondary">AI suggests a classification for each step. OpsPilot then moves approvals, money, eligibility, legal or safety calls and exceptions to <strong>Human decision</strong>, whatever the AI said.</div>
+    </section>
+    {% with current_id = result.id if result else None %}{% include "partials/automation_saved.html" %}{% endwith %}
+  </aside>
+</div>
+
+<template id="af-loading">
+  <section class="card af-loading" role="status" aria-live="polite">
+    <div class="card-body">
+      <div class="ai-loading-status"><span class="spinner"></span><span data-af-stage>Reading your process description…</span></div>
+      <ol class="ai-steps" style="margin-top:10px">
+        <li data-af-step="0">Breaking the process into steps</li>
+        <li data-af-step="1">Classifying each step with Claude</li>
+        <li data-af-step="2">Applying OpsPilot's human-judgment policy</li>
+        <li data-af-step="3">Calculating metrics from the classifications</li>
+      </ol>
+      <div class="grid af-metrics" style="margin-top:var(--space-4)">
+        <div class="skeleton" style="height:78px"></div><div class="skeleton" style="height:78px"></div>
+        <div class="skeleton" style="height:78px"></div><div class="skeleton" style="height:78px"></div>
+      </div>
+      <div class="skeleton" style="height:14px;width:70%;margin-top:var(--space-4)"></div>
+      <div class="skeleton" style="height:14px;width:55%;margin-top:8px"></div>
+    </div>
+  </section>
+</template>
+<script id="af-examples" type="application/json">{{ examples|tojson }}</script>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/automation.js') }}"></script>
+{% endblock %}

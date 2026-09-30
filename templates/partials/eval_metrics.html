@@ -1,0 +1,54 @@
+{% import "_macros.html" as ui %}
+{% set m = run.metrics if run else None %}
+{% set sm = shared if (compare and shared and shared.shared) else None %}
+{% macro delta(key) -%}
+  {%- if sm and sm.current[key].pct is not none and sm.previous[key].pct is not none -%}
+    {%- set d = sm.current[key].pct - sm.previous[key].pct -%}
+    <span class="ev-delta {{ 'is-up' if d > 0 else 'is-down' if d < 0 else 'is-flat' }}" data-tip="vs Run #{{ compare.id }} on {{ sm.shared }} shared {{ 'case' if sm.shared == 1 else 'cases' }}: {{ sm.previous[key].pct }}% → {{ sm.current[key].pct }}%">{{ '+' if d > 0 }}{{ d }} pts</span>
+  {%- endif -%}
+{%- endmacro %}
+<div class="ev-metrics" id="ev-metrics">
+  <div class="card ev-metric">
+    <div class="ev-metric-top"><span class="ev-metric-label">Classification accuracy</span><span class="dm-icon tone-ai">{{ ui.icon('target') }}</span></div>
+    <div class="ev-metric-value num">{{ (m.classification.pct ~ '%') if m and m.classification.pct is not none else '—' }}</div>
+    <div class="ev-metric-foot">{% if m %}<span class="num strong">{{ m.classification.n }}</span> of {{ m.classification.of }} cases: intent matched {{ delta('classification') }}{% else %}Intent matches the expected category{% endif %}</div>
+  </div>
+  <div class="card ev-metric">
+    <div class="ev-metric-top"><span class="ev-metric-label">Information detection accuracy</span><span class="dm-icon tone-info">{{ ui.icon('file') }}</span></div>
+    <div class="ev-metric-value num">{{ (m.information.pct ~ '%') if m and m.information.pct is not none else '—' }}</div>
+    <div class="ev-metric-foot">{% if m %}<span class="num strong">{{ m.information.n }}</span> of {{ m.information.of }} expected items correct {{ delta('information') }}{% else %}Required items found, no invented gaps{% endif %}</div>
+  </div>
+  <div class="card ev-metric">
+    <div class="ev-metric-top"><span class="ev-metric-label">Recommendation agreement</span><span class="dm-icon tone-automation">{{ ui.icon('check-square') }}</span></div>
+    <div class="ev-metric-value num">{{ (m.action.pct ~ '%') if m and m.action.pct is not none else '—' }}</div>
+    <div class="ev-metric-foot">{% if m %}<span class="num strong">{{ m.action.n }}</span> of {{ m.action.of }} cases: right team {{ delta('action') }}{% else %}Suggested team is an accepted one{% endif %}</div>
+  </div>
+  <div class="card ev-metric">
+    <div class="ev-metric-top"><span class="ev-metric-label">Cases requiring review</span><span class="dm-icon tone-review">{{ ui.icon('user') }}</span></div>
+    <div class="ev-metric-value num">{{ m.needs_review if m else '—' }}</div>
+    <div class="ev-metric-foot">{% if m %}{% if m.failed %}<span class="dm-chip tone-danger">{{ m.failed }} failed</span>{% endif %}{{ m.reviewed }} of {{ m.cases }} human-evaluated{% else %}Disagreements wait for a person{% endif %}</div>
+  </div>
+</div>
+{% if compare and shared %}
+<div class="ev-compare-note">{{ ui.icon('split', 'icon-xs') }}Comparing with Run #{{ compare.id }}{% if shared.shared == 0 %}: the runs share no cases, so no changes are shown.{% elif not shared.same_set %}: changes are calculated on the {{ shared.shared }} {{ 'case' if shared.shared == 1 else 'cases' }} both runs tested.{% else %} on the same {{ shared.shared }} cases.{% endif %}
+  {% if compare.prompt_version != run.prompt_version %} The prompt changed between these runs.{% endif %}{% if compare.model != run.model %} The model changed ({{ compare.model }} → {{ run.model }}).{% endif %}</div>
+{% endif %}
+{% if m %}
+<div class="ev-summary" id="ev-summary" style="margin-top:var(--space-4)">
+  <div class="ev-bar" role="img" aria-label="{{ m.results.passed }} passed, {{ m.results.review }} review required, {{ m.results.failed }} failed">
+    {% for k in ('passed', 'review', 'failed') %}{% if m.results[k] %}<span class="ev-bar-{{ k }}" style="flex: {{ m.results[k] }}"></span>{% endif %}{% endfor %}
+  </div>
+  <div class="ev-summary-stats">
+    <span><span class="ev-sw ev-sw-passed"></span><span class="num strong">{{ m.results.passed }}</span> passed</span>
+    <span><span class="ev-sw ev-sw-review"></span><span class="num strong">{{ m.results.review }}</span> review required</span>
+    <span><span class="ev-sw ev-sw-failed"></span><span class="num strong">{{ m.results.failed }}</span> failed</span>
+    <span class="ev-sep"></span>
+    <span data-tip="Human evaluations recorded for this run">{{ ui.icon('user', 'icon-xs') }}{{ m.verdicts.correct }} correct · {{ m.verdicts.partially_correct }} partial · {{ m.verdicts.incorrect }} incorrect · {{ m.not_evaluated }} not evaluated</span>
+    {% if m.human_agreement.of %}<span data-tip="How often the automatic result agreed with the reviewer: Passed with Correct, or anything else with Partially correct / Incorrect.">Automatic vs human agreement <span class="num strong">{{ m.human_agreement.pct }}%</span></span>{% endif %}
+    <span class="ev-sep"></span>
+    <span data-tip="Reported by the Anthropic API for this run">{{ '{:,}'.format(m.tokens) }} tokens</span>
+    {% if m.avg_latency_ms %}<span>avg {{ '%.1f'|format(m.avg_latency_ms / 1000) }} s per case</span>{% endif %}
+    {% if m.errors %}<span class="ev-err">{{ ui.icon('alert', 'icon-xs') }}{{ m.errors }} API {{ 'error' if m.errors == 1 else 'errors' }}</span>{% endif %}
+  </div>
+</div>
+{% endif %}

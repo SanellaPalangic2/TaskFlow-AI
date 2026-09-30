@@ -1,0 +1,34 @@
+{% import "_macros.html" as ui %}
+<section class="card project-header" id="project-header">
+  <div class="project-header-top">
+    <div class="project-identity">
+      <span class="avatar">{{ ui.initials(project.first_name, project.last_name) }}</span>
+      <div>
+        <h1>{{ project.customer_name }}</h1>
+        <div class="sub">
+          <span>{{ ui.icon('home', 'icon-sm') }}{{ project.service_type }}</span>
+          {% if project.address %}<span>{{ ui.icon('map-pin', 'icon-sm') }}{{ project.address }}</span>{% endif %}
+          <span class="muted">Project #{{ '%04d'|format(project.id) }}{% if project.is_synthetic %}, synthetic demo record{% endif %}</span>
+        </div>
+      </div>
+    </div>
+    <form method="post" action="{{ url_for('project_rules', project_id=project.id) }}" data-loading-form>
+      <button class="btn btn-sm" data-tip="Re-check contact details, required documents and roof age. Logged as Automation." data-tip-pos="left">{{ ui.icon('cpu') }}<span class="spinner"></span>Run business rules</button>
+    </form>
+  </div>
+
+  <div class="stepper" aria-label="Workflow stage">
+    {% for s in STAGES %}
+    <div class="step {{ 'is-done' if loop.index0 < stage_index }}{{ 'is-current' if loop.index0 == stage_index }}">
+      <span class="step-bar"></span><span class="step-label">{{ s }}</span>
+    </div>
+    {% endfor %}
+  </div>
+
+  <div class="header-facts">
+    <div><div class="fact-label">Current stage</div><div class="fact-value">{{ project.current_stage }}</div></div>
+    <div><div class="fact-label">Status</div>{{ ui.status_badge(project.project_status) }}</div>
+    <div><div class="fact-label">Priority</div>{{ ui.priority_badge(project.priority) }}</div>
+    <div><div class="fact-label">Last updated</div><div class="fact-value" data-tip="{{ project.updated_at|datetime }}">{{ project.updated_at|timeago }}</div></div>
+  </div>
+</section>

@@ -1,0 +1,161 @@
+{% extends "base.html" %}
+
+{% block crumbs %}
+<div class="crumbs"><a href="{{ url_for('projects') }}">Projects</a>{{ ui.icon('chevron-right') }}<span>{{ project.customer_name }}</span></div>
+{% endblock %}
+
+{% block header_actions %}
+<button type="button" class="btn" data-open-modal="workflow-modal">{{ ui.icon('edit') }}<span class="btn-label">Update workflow</span></button>
+<button type="button" class="btn" data-open-modal="draft-modal">{{ ui.icon('mail') }}<span class="btn-label">Draft message</span></button>
+{% endblock %}
+
+{% block content %}
+{% if auto_analyze %}<span data-auto-analyze hidden></span>{% endif %}
+{% include "partials/project_header.html" %}
+
+<div class="grid detail-grid">
+  {# ---------------- Left column ---------------- #}
+  <div class="stack">
+    {% include "partials/next_best_action.html" %}
+    {% include "partials/ai_analysis.html" %}
+
+    {% include "partials/project_tasks.html" %}
+    {% include "partials/activity_timeline.html" %}
+  </div>
+
+  {# ---------------- Right column ---------------- #}
+  <div class="stack">
+    <section class="card">
+      <div class="card-header"><div class="card-title">{{ ui.icon('folder') }}Project overview</div></div>
+      <div class="card-body stack">
+        <dl class="kv">
+          <dt>Service</dt><dd>{{ project.service_type }}</dd>
+          <dt>Electric bill</dt><dd class="num">{% if project.monthly_electric_bill %}{{ project.monthly_electric_bill|money }} / month{% else %}<span class="muted">Not provided</span>{% endif %}</dd>
+          <dt>Roof age</dt>
+          <dd>{% if project.roof_age is not none %}<span class="num">{{ project.roof_age }} years</span>
+              {% if project.roof_age > roof_threshold %} <span class="badge status-human-review" data-tip="Above the {{ roof_threshold }}-year demo threshold. Flagged for review by qualified staff; OpsPilot makes no roof assessment.">Review</span>{% endif %}
+              {% else %}<span class="muted">Not provided</span>{% endif %}</dd>
+          <dt>Created</dt><dd>{{ project.created_at|datetime }}</dd>
+        </dl>
+        <div>
+          <div class="ai-block-title">Customer notes</div>
+          {% if project.notes %}
+          <blockquote class="timeline-detail" style="margin:0; font-size:var(--text-base); color:var(--text)">“{{ project.notes }}”</blockquote>
+          {% else %}<p class="muted small">No notes recorded.</p>{% endif %}
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-header"><div class="card-title">{{ ui.icon('user') }}Customer information</div></div>
+      <div class="card-body">
+        <dl class="kv">
+          <dt>Name</dt><dd>{{ project.customer_name }}</dd>
+          <dt>Email</dt><dd>{% if project.email %}<a href="mailto:{{ project.email }}">{{ project.email }}</a>{% else %}<span class="badge doc-missing">Missing</span>{% endif %}</dd>
+          <dt>Phone</dt><dd class="num">{% if project.phone %}{{ project.phone }}{% else %}<span class="badge doc-missing">Missing</span>{% endif %}</dd>
+          <dt>Address</dt><dd>{% if project.address %}{{ project.address }}{% else %}<span class="badge doc-missing">Missing</span>{% endif %}</dd>
+        </dl>
+      </div>
+    </section>
+
+    <section class="card" id="documents">
+      <div class="card-header">
+        <div class="card-title">{{ ui.icon('file') }}Documents</div>
+        <span class="card-subtitle">Required for {{ project.service_type }}</span>
+      </div>
+      {% if documents %}
+      <ul class="list">
+        {% for d in documents %}
+        <li class="list-item">
+          <span class="doc-icon">{{ ui.icon('bill' if d.document_type == 'Utility Bill' else 'file') }}</span>
+          <div class="grow">
+            <div class="strong small">{{ d.document_type }}</div>
+            <div class="xsmall muted">{{ d.filename or 'Not on file yet' }}</div>
+          </div>
+          {{ ui.doc_badge(d.status) }}
+          {% if d.status in ('Missing', 'Requested') %}
+          <form method="post" action="{{ url_for('document_received', document_id=d.id) }}" data-loading-form>
+            <button class="btn btn-sm" data-tip="Simulates the document arriving. Rules re-run and close the matching task." data-tip-pos="left">{{ ui.icon('check') }}<span class="spinner"></span>Mark received</button>
+          </form>
+          {% endif %}
+        </li>
+        {% endfor %}
+      </ul>
+      {% else %}
+        {% call ui.empty_state('file', 'No documents required', compact=True) %}{% endcall %}
+      {% endif %}
+    </section>
+  </div>
+</div>
+
+{# ---------------- Modals ---------------- #}
+<dialog class="modal" id="workflow-modal" aria-labelledby="workflow-title">
+  <form method="post" action="{{ url_for('project_workflow', project_id=project.id) }}" data-loading-form>
+    <div class="modal-header">
+      <div><div class="modal-title" id="workflow-title">Update workflow</div>
+        <div class="modal-desc">Stage and status changes are human decisions and are recorded in the activity log.</div></div>
+      <button type="button" class="btn btn-ghost btn-icon" data-close-modal aria-label="Close">{{ ui.icon('x') }}</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-grid">
+        <div class="field"><label class="label" for="wf-stage">Stage</label>
+          <select class="select" id="wf-stage" name="stage">{% for s in STAGES %}<option {{ 'selected' if project.current_stage == s }}>{{ s }}</option>{% endfor %}</select></div>
+        <div class="field"><label class="label" for="wf-status">Status</label>
+          <select class="select" id="wf-status" name="status">{% for s in STATUSES %}<option {{ 'selected' if project.project_status == s }}>{{ s }}</option>{% endfor %}</select></div>
+        <div class="field"><label class="label" for="wf-priority">Priority</label>
+          <select class="select" id="wf-priority" name="priority">{% for p in PRIORITIES %}<option {{ 'selected' if project.priority == p }}>{{ p }}</option>{% endfor %}</select></div>
+      </div>
+      <div class="field"><label class="label" for="wf-note">Note<span class="opt">Optional</span></label>
+        <textarea class="textarea" id="wf-note" name="note" rows="3" maxlength="500" placeholder="Why is this changing? e.g. Customer confirmed all documents by phone."></textarea></div>
+      <div class="alert" style="font-size:var(--text-sm)">{{ ui.icon('info') }}<div>Moving to Completed requires both stage and status to be Completed. Business rules can still flag the project later if something is missing.</div></div>
+    </div>
+    <div class="modal-footer">
+      <button type="button" class="btn" data-close-modal>Cancel</button>
+      <button type="submit" class="btn btn-primary">{{ ui.icon('check') }}<span class="spinner"></span>Save change</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog class="modal modal-lg" id="draft-modal" aria-labelledby="draft-title" data-draft-url="{{ url_for('api_draft', project_id=project.id) }}">
+  <form data-draft-form data-own-loading novalidate>
+    <div class="modal-header">
+      <div><div class="modal-title" id="draft-title">Draft customer message</div>
+        <div class="modal-desc">AI writes a first draft for {{ project.first_name }}. It goes into the <a href="{{ url_for('approvals_page') }}">Approval Center</a> queue; you can approve it here or there. Nothing is sent.</div></div>
+      <button type="button" class="btn btn-ghost btn-icon" data-close-modal aria-label="Close">{{ ui.icon('x') }}</button>
+    </div>
+    <div class="modal-body">
+      <div data-draft-step="choose" class="stack" style="gap:var(--space-2)">
+        <div class="label">What is the message for?</div>
+        {% for key, label, desc in draft_purposes %}
+        <label class="checkbox"><input type="radio" name="purpose" value="{{ key }}" {{ 'checked' if loop.first }}>
+          <span><span class="strong">{{ label }}</span><span class="help" style="display:block">{{ desc }}</span></span></label>
+        {% endfor %}
+      </div>
+      <div data-draft-step="loading" hidden>
+        <div class="ai-loading" role="status">
+          <div class="ai-loading-status"><span class="spinner"></span>Drafting with Claude…</div>
+          <div class="skeleton" style="width: 50%; height: 30px"></div>
+          <div class="skeleton" style="height: 120px"></div>
+        </div>
+      </div>
+      <div data-draft-error></div>
+      <div data-draft-step="review" class="stack" hidden>
+        <div class="alert alert-review" data-reviewer-note>{{ ui.icon('shield') }}<div class="grow"><div class="alert-title">Check before approving</div><span data-note-text></span></div><button type="button" class="why-btn" data-draft-why hidden aria-label="Why? Explain this draft">{{ ui.icon('info') }}Why?</button></div>
+        <div class="field"><label class="label" for="draft-subject">Subject</label>
+          <input class="input" id="draft-subject" name="subject" maxlength="150"></div>
+        <div class="field"><label class="label" for="draft-body">Message</label>
+          <textarea class="textarea" id="draft-body" name="body" rows="10" maxlength="2500"></textarea></div>
+        <div class="provenance" data-draft-meta></div>
+        <p class="xsmall muted">Edits are saved beside the original AI draft in the audit trail.</p>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button type="button" class="btn left" data-close-modal>Cancel</button>
+      <button type="button" class="btn" data-draft-back hidden>{{ ui.icon('arrow-left') }}Start over</button>
+      <button type="button" class="btn btn-ai" data-draft-generate>{{ ui.icon('sparkle') }}<span class="spinner"></span><span class="btn-text">Draft with AI</span></button>
+      <a class="btn" data-draft-queue hidden href="{{ url_for('approvals_page') }}">{{ ui.icon('stamp') }}Review later in Approvals</a>
+      <button type="submit" class="btn btn-primary" data-draft-approve hidden>{{ ui.icon('check') }}<span class="spinner"></span><span class="btn-text">Approve message</span></button>
+    </div>
+  </form>
+</dialog>
+{% endblock %}

@@ -1,0 +1,32 @@
+{% import "_macros.html" as ui %}
+<section class="card" id="tasks">
+  <div class="card-header">
+    <div class="card-title">{{ ui.icon('check-square') }}Open tasks <span class="count">{{ tasks|length }}</span></div>
+    {% if completed_task_count %}<span class="card-subtitle">{{ completed_task_count }} completed</span>{% endif %}
+  </div>
+  {% if tasks %}
+  <div class="table-wrap">
+    <table class="table">
+      <thead><tr><th>Task</th><th>Department</th><th>Due</th><th>Status</th></tr></thead>
+      <tbody>
+      {% for t in tasks %}
+        <tr class="{{ 'is-overdue' if t.is_overdue }}">
+          <td><span class="cell-primary">{{ t.title }}</span>
+            <span class="cell-sub">{{ ui.actor_tag(t.source) if t.source in ('AI', 'AUTOMATION') else 'Added by team' }}</span></td>
+          <td class="nowrap secondary">{{ t.department }}</td>
+          <td class="nowrap {{ 'strong' if t.is_overdue }}" style="{{ 'color:var(--danger-700)' if t.is_overdue }}">{{ t.due_date|due }}</td>
+          <td>
+            <label class="sr-only" for="task-{{ t.id }}">Status for {{ t.title }}</label>
+            <select class="select" id="task-{{ t.id }}" style="height:28px;width:130px" data-task-status="{{ url_for('api_task_status', task_id=t.id) }}">
+              {% for s in TASK_STATUSES %}<option {{ 'selected' if t.status == s }}>{{ s }}</option>{% endfor %}
+            </select>
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+    {% call ui.empty_state('check-square', 'No open tasks', 'Tasks appear here when rules flag something or a recommendation is approved.', compact=True) %}{% endcall %}
+  {% endif %}
+</section>

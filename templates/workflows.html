@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+
+{% macro wf_status(status) -%}
+{% set m = {'Draft': ('wf-status-draft', 'edit'), 'Pending Approval': ('wf-status-pending', 'clock'), 'Active': ('wf-status-active', 'check'), 'Disabled': ('wf-status-disabled', 'power')} %}
+{% set c = m.get(status, ('wf-status-draft', 'edit')) %}
+<span class="badge {{ c[0] }}">{{ ui.icon(c[1]) }}{{ status }}</span>
+{%- endmacro %}
+
+{% block header_actions %}
+<a href="{{ url_for('workflow_new') }}" class="btn btn-primary">{{ ui.icon('plus') }}<span class="btn-label">New workflow</span></a>
+{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Workflows</h1>
+    <p>Workflow designs proposed by AI and approved by people. Nothing becomes Active without a human approval.</p>
+  </div>
+</div>
+
+<section class="card">
+  <nav class="tabs" aria-label="Filter by status" style="padding: 0 var(--space-3)">
+    <a class="tab{% if not status %} is-active{% endif %}" href="{{ url_for('workflows_page') }}">All <span class="count">{{ total }}</span></a>
+    {% for s in ['Draft', 'Pending Approval', 'Active', 'Disabled'] %}
+    <a class="tab{% if status == s %} is-active{% endif %}" href="{{ url_for('workflows_page', status=s) }}">{{ s }} <span class="count">{{ counts[s] }}</span></a>
+    {% endfor %}
+  </nav>
+
+  {% if designs %}
+  <div class="wl-grid">
+    {% for d in designs %}
+    <a class="wl-card" href="{{ url_for('workflow_view', design_id=d.id) }}">
+      <div class="row-between">
+        <span class="wl-name">{{ d.name }}</span>
+        {{ wf_status(d.status) }}
+      </div>
+      <p class="wl-summary">{{ d.summary }}</p>
+      <div class="wl-strip" aria-hidden="true">
+        {% for key, t in node_types.items() %}{% if d.counts.get(key) %}<span class="wl-seg {{ t.css }}" style="flex: {{ d.counts[key] }}"></span>{% endif %}{% endfor %}
+      </div>
+      <div class="wl-meta">
+        <span>{{ d.nodes }} steps</span>
+        <span>{{ ui.icon('sparkle', 'icon-sm') }}{{ d.ai_nodes }} with AI</span>
+        <span>{{ ui.icon('shield', 'icon-sm') }}{{ d.approvals }} approval{{ 's' if d.approvals != 1 }}</span>
+        <span class="wl-updated" data-tip="{{ d.updated_at|datetime }}">Updated {{ d.updated_at|timeago }}</span>
+      </div>
+    </a>
+    {% endfor %}
+  </div>
+  {% else %}
+    {% call ui.empty_state('workflow', 'No workflows yet' if not status else 'No ' ~ status|lower ~ ' workflows', 'Describe a workflow in plain English and OpsPilot will propose a visual design for you to review and approve.') %}
+      <a class="btn btn-primary" style="margin-top:var(--space-2)" href="{{ url_for('workflow_new') }}">{{ ui.icon('plus') }}New workflow</a>
+    {% endcall %}
+  {% endif %}
+</section>
+{% endblock %}

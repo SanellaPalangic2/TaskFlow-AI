@@ -1,4 +1,4 @@
-# OpsPilot AI
+# TaskFlow AI
 
 
 An internal operations command center prototype. It shows how **business rules**, **AI** and **human decisions** work together on customer projects:

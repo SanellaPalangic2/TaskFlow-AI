@@ -1,4 +1,4 @@
-# TaskFlow AI
+# OPSPilot (TaskFlow AI)
 
 
 An internal operations command center prototype. It shows how **business rules**, **AI** and **human decisions** work together on customer projects:
@@ -11,7 +11,7 @@ Every action is written to an activity log tagged `AI`, `AUTOMATION` or `HUMAN`.
 
 All customers and projects are **synthetic demo data**. OpsPilot makes no engineering, safety, legal, financial, permitting or installation decisions.
 
-[demo link](https://opspilot-ai-3rio.onrender.com)
+[live demo](https://opspilot-ai-3rio.onrender.com)
 
 ## Architecture
 

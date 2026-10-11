@@ -214,7 +214,8 @@
       block("Important information the model should detect", (ex.information || []).length ? list(ex.information.map((i) => ({ text: i.label, meta: "Matches any of: " + i.any.join(", ") }))) : h("p", { class: "xp-block-note", text: "None beyond the rule findings." })),
       (ex.must_not_claim || []).length ? block("Must not claim as missing", list(ex.must_not_claim.map((i) => ({ text: i.label, meta: "Fails if reported missing: " + i.any.join(", ") })))) : null,
       block("Accepted action category (team)", chips(ex.departments || [])),
-      ex.action_label ? h("p", { class: "xp-block-note", text: "Expected action: " + ex.action_label }) : null);
+      ex.action_label ? h("p", { class: "xp-block-note", text: "Expected action: " + ex.action_label }) : null,
+      ex.human_review ? h("p", { class: "xp-block-note", text: "Expected: the model asks for human review (checked as a fourth field)." }) : null);
 
     const actual = a ? sec("ev-sec-actual", "src-ai", "Actual AI output", "Stored unchanged", "The validated structured output returned by Claude.",
       h("div", { class: "xp-ai-field" }, h("span", { class: "xp-ai-label", text: "Classification (intent)" }), h("span", { class: "xp-ai-value", text: a.detected_intent + (a.intent_detail ? `: ${a.intent_detail}` : "") })),

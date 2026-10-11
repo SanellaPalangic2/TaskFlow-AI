@@ -5,7 +5,8 @@
 <tr class="ev-row{{ ' is-clickable' if r }}{{ ' is-out' if not row.in_plan }}" data-case="{{ c.key }}"{% if r %} data-result="{{ r.id }}" tabindex="0"{% endif %}>
   <td class="ev-c-case">
     <div class="ev-case"><span class="ev-case-n num">{{ row.n }}</span>
-      <div class="grow"><div class="ev-case-title">{{ c.title }}</div><div class="ev-case-sub" title="{{ c.summary }}">{{ c.summary }}</div></div></div>
+      <div class="grow"><div class="ev-case-title">{{ c.title }}</div><div class="ev-case-sub" title="{{ c.summary }}">{{ c.summary }}</div>
+        {% if c.tier == 'hard' %}<div class="ev-case-tags"><span class="dm-chip tone-review" data-tip="Written to try to break the analysis">Hard</span>{% for t in c.tags %}<span class="ev-case-tag">{{ t }}</span>{% endfor %}{% if e.human_review %}<span class="ev-case-tag" data-tip="Also checks that the model asks for human review">expects review flag</span>{% endif %}</div>{% endif %}</div></div>
   </td>
   <td class="ev-c-exp">
     <div class="ev-kv"><span class="ev-k">Intent</span><span class="ev-v" title="{{ e.intent|join(' or ') }}">{{ e.intent[0] }}{% if e.intent|length > 1 %} <span class="ev-alt">+{{ e.intent|length - 1 }}</span>{% endif %}</span></div>

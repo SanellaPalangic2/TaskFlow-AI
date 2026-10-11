@@ -59,14 +59,14 @@ How the key is protected:
 ```bash
 python reset_demo_data.py --yes
 ```
-This restores the clean synthetic dataset: 14 projects (7 need attention), 21 open tasks, 2 pending approvals and 10 evaluation cases. It changes only `instance/opspilot.db` and saves a backup to `instance/backups/` first. It makes no API calls. It is safe to run with the app running; if Windows reports the file is in use, stop the app, run it again and restart.
+This restores the clean synthetic dataset: 14 projects (7 need attention), 21 open tasks, 2 pending approvals and 40 evaluation cases. It changes only `instance/opspilot.db` and saves a backup to `instance/backups/` first. It makes no API calls. It is safe to run with the app running; if Windows reports the file is in use, stop the app, run it again and restart.
 
 ### Optional: populate the AI pages with real results (run once, before the interview)
 These use the real API. Each request is small, but each command costs money, so run them once, not on every rehearsal.
 
 | Command | Requests | Fills |
 |---|---|---|
-| `python run_evaluation.py` | 10 | Evaluation Lab: one full run with real metrics |
+| `python run_evaluation.py` | 40 | Evaluation Lab: one full run with real metrics (10 core + 30 hard cases) |
 | `python run_workflow_examples.py` | 5 | Workflows: 3 sample designs saved as Drafts |
 | `python run_automation_examples.py` | 6 | Automation Finder: 3 saved analyses |
 
@@ -157,7 +157,7 @@ Rule of thumb: **rules for the predictable, AI for the unstructured, people for 
 4. **How is the API key protected?** It is read on the server only and never reaches the browser, the database, the logs or any response. `.env` is gitignored. It was tested by scanning every response, the logs and the database file for a test key.
 5. **How does the Copilot avoid SQL injection or data leaks?** The model can only call 10 predefined tools with validated arguments, and the SQL is fixed and parameterized. Unknown tools or bad arguments are rejected before any query runs.
 6. **Why structured outputs rather than free text?** They can be validated, stored, compared and tested. Free text can't be scored reliably.
-7. **How do you measure whether the AI is any good?** The Evaluation Lab runs 10 synthetic cases through the production call. Python compares intent, required information and the suggested team against expected values, and people review disagreements. Runs are stored and compared by model and prompt version.
+7. **How do you measure whether the AI is any good?** The Evaluation Lab runs 40 synthetic cases through the production call: 10 everyday ones and 30 written to break it (contradictory notes, vague intent, missing and already-present documents, prompt injection, multi-intent). Python compares intent, required information and the suggested team against expected values, and people review disagreements. Runs are stored and compared by model and prompt version.
 8. **Why not let the AI grade its own answers?** It is circular and unreliable. Metrics come from deterministic comparisons, and quality judgment comes from people.
 9. **How do you keep humans in control?** AI output is stored as a pending suggestion. Customer-facing and consequential actions go through the Approval Center, and approving a message only marks it approved. A human-judgment policy moves approvals, money, eligibility, legal and safety steps to people.
 10. **How is the audit trail protected?** The original AI output can't be changed (a SQLite trigger blocks updates), and decisions and evaluations are append-only. Edits are stored beside the original, never over it.

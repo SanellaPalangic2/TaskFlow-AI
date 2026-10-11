@@ -42,6 +42,9 @@
     <span><span class="ev-sw ev-sw-passed"></span><span class="num strong">{{ m.results.passed }}</span> passed</span>
     <span><span class="ev-sw ev-sw-review"></span><span class="num strong">{{ m.results.review }}</span> review required</span>
     <span><span class="ev-sw ev-sw-failed"></span><span class="num strong">{{ m.results.failed }}</span> failed</span>
+    {% if m.by_tier %}<span class="ev-sep"></span>
+    {% for tier, label in (('core', 'Core'), ('hard', 'Hard')) %}{% if m.by_tier[tier] %}<span data-tip="{{ 'The original everyday cases' if tier == 'core' else 'Contradictory notes, vague intent, missing and present documents, prompt injection, multi-intent' }}">{{ label }} <span class="num strong">{{ m.by_tier[tier].n }}/{{ m.by_tier[tier].of }}</span> passed{% if m.by_tier[tier].pct is not none %} ({{ m.by_tier[tier].pct }}%){% endif %}</span>{% endif %}{% endfor %}
+    {% if m.review_flag.of %}<span data-tip="Cases that expect the model to ask for human review (contradictions, injections, judgments outside scope)">Review flag raised <span class="num strong">{{ m.review_flag.n }}/{{ m.review_flag.of }}</span></span>{% endif %}{% endif %}
     <span class="ev-sep"></span>
     <span data-tip="Human evaluations recorded for this run">{{ ui.icon('user', 'icon-xs') }}{{ m.verdicts.correct }} correct · {{ m.verdicts.partially_correct }} partial · {{ m.verdicts.incorrect }} incorrect · {{ m.not_evaluated }} not evaluated</span>
     {% if m.human_agreement.of %}<span data-tip="How often the automatic result agreed with the reviewer: Passed with Correct, or anything else with Partially correct / Incorrect.">Automatic vs human agreement <span class="num strong">{{ m.human_agreement.pct }}%</span></span>{% endif %}

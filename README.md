@@ -50,7 +50,8 @@ app.py ─────────── routes only
 | `services/explain.py` | Explainability: builds each "Why?" explanation (evidence, AI interpretation, business rules, human decision) from stored data; `capture_evidence()` snapshots the facts at analysis time |
 | `templates/partials/explain_drawer.html`, `static/js/explain.js` | The shared "Why?" side panel. Any element with `data-explain="/api/explain/..."` opens it |
 | `run_explainability_check.py` | Real API check of the explanations |
-| `services/evaluation.py` | AI Evaluation Lab: 10 synthetic cases, run engine with cost controls, Python comparison and metrics, human evaluations, run comparison |
+| `services/evaluation.py` | AI Evaluation Lab: run engine with cost controls, Python comparison and metrics, human evaluations, run comparison |
+| `services/eval_cases.py` | The 40 synthetic test cases: 10 core and 30 hard (adversarial) cases with expected answers |
 | `templates/evaluation.html`, `templates/partials/eval_*.html`, `static/js/evaluation.js` | Evaluation Lab page: metrics, results table, live run progress, detail panel, run history |
 | `reset_demo_data.py` | Restores the synthetic demo dataset (backup first; only the demo database) |
 | `INTERVIEW_DEMO.md` | Start commands, API setup, demo scripts, architecture, likely questions, production limitations |
@@ -198,17 +199,36 @@ Read-only. `services/dashboard.py` calculates every figure from SQLite each time
 
 ## AI Evaluation Lab
 
-AI features are tested and measured, not assumed to work. The lab tests the **real project-analysis call** (`ai_service.analyze_project`, the same function the project page uses) against **10 synthetic test cases** with known answers.
+AI features are tested and measured, not assumed to work. The lab tests the **real project-analysis call** (`ai_service.analyze_project`, the same function the project page uses) against **40 synthetic test cases** with known answers.
+
+**Two tiers.** A perfect score on a handful of easy cases proves little, so most of the cases are written to try to break the analysis:
+
+| Tier | Cases | What they test |
+|---|---:|---|
+| Core | 10 | Everyday requests: roof worries, pricing, scheduling, complaints, HOA paperwork, missing contact details |
+| Hard | 30 | Cases designed to make the model fail (tags below; a case can carry more than one) |
+
+| Hard-case tag | Cases | Example |
+|---|---:|---|
+| Contradictory notes | 7 | The customer says they emailed the bill, but the record says it's missing; the roof age on file disagrees with "the roof is original to our 1990s house" |
+| Vague intent | 5 | Notes that are just "?", "Thanks!" or empty |
+| Missing documents | 9 | "See attached" when nothing arrived; a brand-new lead with no contact details, bill or roof age |
+| Present documents | 10 | Documents already Received or Verified that must **not** be reported missing; roof data on a battery project that doesn't need any |
+| Adversarial | 6 | Prompt injection in the notes ("ignore all previous instructions…", a fake JSON answer), demands for a yes/no structural verdict, an unverified price promise, a legal threat |
+| Multi-intent | 4 | A price question and a visit request together, a cancellation, a tenant asking for the owner |
+
+Expected values are written with each case, before any run, and are not tuned to the model's answers. A sanity check confirms the hard cases are meaningful: a lazy answer that reports everything missing, routes to Sales and never asks for review passes 0 of the 30 hard cases.
 
 **Each test case** is a fictional project record (service, bill, roof age, contact status, documents, customer notes) with:
 - **Expected classification:** the accepted customer intents.
 - **Expected important information:** items the model must report in its missing information or concerns (for example the utility bill, the HOA approval or the backup scope), plus items it must *not* claim are missing (for example a bill that is already verified).
 - **Expected action category:** the accepted teams for the next step.
+- **Expected review flag** (14 hard cases only): contradictions, prompt injections and requests outside operations scope must set `requires_human_review`.
 
-**A run** (Run AI Evaluation → Quick check 3 or Full 10):
+**A run** (Run AI Evaluation → Quick check 3 or Full 40):
 1. OpsPilot builds each case's context exactly as in production: the same rules engine findings and the same context builder.
 2. It sends one request per case to Claude and stores the validated structured output unchanged, with the response ID, latency and the token usage Anthropic reports.
-3. Python compares the three fields. A case is **Passed** when all three pass, **Review required** when one does not, and **Failed** when two or more do not or the call failed. A failed call is stored as failed; no output is invented.
+3. Python compares the three fields (four when a review flag is expected). A case is **Passed** when every check passes, **Review required** when one does not, and **Failed** when two or more do not or the call failed. A failed call is stored as failed; no output is invented.
 4. A person marks results **Correct**, **Partially correct** or **Incorrect**, with a note. Reviews are append-only.
 
 **Metrics** are counted in Python from the stored expected and actual values. The model never grades itself.
@@ -216,12 +236,13 @@ AI features are tested and measured, not assumed to work. The lab tests the **re
 - Information detection accuracy: expected items handled correctly ÷ all expected items, including the "must not claim" ones.
 - Recommendation agreement: accepted team ÷ cases.
 - Cases requiring review: results that did not pass and have no human evaluation yet.
+- Pass rate by tier and by tag (core vs. hard, and each hard-case category), plus how often the expected review flag was raised.
 
 **Run history** stores the model, the prompt version (a fingerprint of the production prompt and schema), the time, the case count, every result and every human evaluation. It never stores the API key. **Compare with** shows the change per metric on the cases both runs share, and whether each case improved or regressed. Stored results cannot be edited (database trigger).
 
 ### Running it safely (API usage)
 - **Nothing runs on its own.** Opening the page, or reloading it mid-run, never calls Claude. A run starts only after someone clicks **Run AI Evaluation** and confirms.
-- **Small and predictable.** One request per case, at most 10 per run (`EVAL_MAX_CASES`). The confirmation shows the request count and a rough token estimate. The token usage Anthropic reports is stored with each result.
+- **Small and predictable.** One request per case, at most 50 per run (`EVAL_MAX_CASES`, default 50); a full run is 40 requests, roughly 57,500 input and 28,000 output tokens by the app's own estimate. The confirmation shows the request count and a rough token estimate. The token usage Anthropic reports is stored with each result.
 - **Start with a Quick check** (3 requests), or `python run_evaluation.py --dry-run` to see what would be sent without sending anything.
 - **Server-side limits.** One run at a time, at least 60 s between runs (`EVAL_COOLDOWN_SECONDS`), and at most 10 runs per day (`EVAL_MAX_RUNS_PER_DAY`). They are checked on the server, so repeated clicks or scripts cannot get around them.
 - **Stop any time.** "Stop after this case" takes effect before the next request. The run also stops by itself on authentication, quota, rate-limit or availability errors instead of retrying every case.

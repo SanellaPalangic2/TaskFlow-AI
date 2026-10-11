@@ -83,13 +83,15 @@
     <details class="ev-rules">
       <summary>{{ ui.icon('info', 'icon-sm') }}How results are decided</summary>
       <div class="ev-rules-pop">
-        <p><strong>Three checks per case</strong>, computed in Python:</p>
+        <p><strong>Three checks per case</strong> (four on hard cases that expect a review flag), computed in Python:</p>
         <ul>
           <li><strong>Classification:</strong> the model's intent is one of the accepted intents.</li>
           <li><strong>Important information:</strong> every expected item appears in the model's missing information or concerns, and nothing on the "must not claim" list is reported missing.</li>
           <li><strong>Action category:</strong> the suggested team is one of the accepted teams.</li>
+          <li><strong>Human review flag</strong> (some hard cases): contradictions, prompt injections and out-of-scope requests must be flagged for a person.</li>
         </ul>
-        <p><span class="badge ev-passed">Passed</span> all three pass · <span class="badge ev-review">Review required</span> one does not · <span class="badge ev-failed">Failed</span> two or more do not, or the API call failed.</p>
+        <p><span class="badge ev-passed">Passed</span> every check passes · <span class="badge ev-review">Review required</span> one does not · <span class="badge ev-failed">Failed</span> two or more do not, or the API call failed.</p>
+        <p><span class="dm-chip tone-review">Hard</span> cases were written to try to break the analysis.</p>
         <p class="muted">The model never grades itself.</p>
       </div>
     </details>

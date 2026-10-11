@@ -34,7 +34,7 @@ AI_TIMEOUT_SECONDS = float(os.getenv("ANTHROPIC_TIMEOUT_SECONDS", "45"))
 AI_MAX_RETRIES = int(os.getenv("ANTHROPIC_MAX_RETRIES", "1"))
 
 # AI Evaluation Lab cost controls. A run never starts on page load; it is started by a person.
-EVAL_MAX_CASES = int(os.getenv("EVAL_MAX_CASES", "10"))              # hard cap: requests per run (max 10)
+EVAL_MAX_CASES = int(os.getenv("EVAL_MAX_CASES", "50"))              # hard cap: requests per run (max 50)
 EVAL_COOLDOWN_SECONDS = int(os.getenv("EVAL_COOLDOWN_SECONDS", "60"))  # minimum time between runs
 EVAL_MAX_RUNS_PER_DAY = int(os.getenv("EVAL_MAX_RUNS_PER_DAY", "10"))  # daily cap on runs
 

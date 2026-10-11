@@ -3,7 +3,7 @@ Run the AI Evaluation Lab from the terminal (same code, same cost controls as th
 
     python run_evaluation.py --dry-run        # show what would be sent; makes NO API calls
     python run_evaluation.py --limit 3        # quick check: 3 requests
-    python run_evaluation.py                  # full evaluation: 10 requests
+    python run_evaluation.py                  # full evaluation: all 40 cases = 40 requests
 
 Results are saved to your OpsPilot database and appear in Evaluation Lab > Run history.
 The cooldown and daily cap in .env (EVAL_COOLDOWN_SECONDS, EVAL_MAX_RUNS_PER_DAY) apply here too.
@@ -38,7 +38,9 @@ def main():
     print(f"{len(cases)} synthetic cases = {est['requests']} requests, roughly {est['input_tokens']:,.0f} input and "
           f"{est['output_tokens']:,} output tokens (estimate)\n")
     for i, c in enumerate(cases, 1):
-        print(f"  {i:>2}. {c['title']}  ->  expects {' / '.join(c['expected']['intent'])}, team {' / '.join(c['expected']['departments'])}")
+        tier = "HARD" if c.get("tier") == "hard" else "core"
+        print(f"  {i:>2}. [{tier}] {c['title']}  ->  expects {' / '.join(c['expected']['intent'])}, "
+              f"team {' / '.join(c['expected']['departments'])}{', review flag' if c['expected'].get('human_review') else ''}")
     if args.dry_run:
         print("\nDry run: nothing was sent to Claude.")
         return 0
@@ -76,6 +78,17 @@ def main():
     print(f"Information detection accuracy {fmt('information')}")
     print(f"Recommendation agreement       {fmt('action')}")
     print(f"Passed / review / failed       {m['results']['passed']} / {m['results']['review']} / {m['results']['failed']}")
+    print(f"Overall pass rate              {fmt('pass_rate')}")
+    if m["review_flag"]["of"]:
+        print(f"Human review flag raised       {fmt('review_flag')}")
+    for tier in ("core", "hard"):
+        t = m["by_tier"].get(tier)
+        if t:
+            print(f"  {tier:<5} cases passed              {t['pct']}% ({t['n']}/{t['of']})")
+    print("Pass rate by tag:")
+    for tag, t in m["by_tag"].items():
+        if tag != "core":
+            print(f"  {tag:<22} {t['pct']}% ({t['n']}/{t['of']})")
     print(f"Tokens reported by Claude      {m['tokens']:,}")
     print("Review disagreements in the app: Evaluation Lab.")
     db.close()
